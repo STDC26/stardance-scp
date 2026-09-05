@@ -73,6 +73,9 @@ export type GovernedFailureCode =
     | "PROVIDER_NOT_APPROVED"
     | "INVALID_TRANSITION"
     | "AMENDMENT_IN_FLIGHT"
+    // G2R-01: validation was handed a change-set that is not the one durably
+    // recorded on the amendment at proposal time.
+    | "PROPOSAL_MISMATCH"
     | "RECONFIRMATION_REQUIRED"
     | "MARKET_UNKNOWN"
     | "COGNITION_NOT_BINDING";

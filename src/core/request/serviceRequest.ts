@@ -240,12 +240,46 @@ export async function insertVersion(
 
 export interface RequestVersion {
     requestVersionId: string;
+    requestId: string;
     version: number;
     priceMinorUnits: number;
     currencyCode: string;
     durationMinutes: number;
     startTime: Date;
     endTime: Date;
+    /** Frozen add-on set for this version, in the order it was snapshotted. */
+    addonIds: string[];
+}
+
+interface VersionRow {
+    request_version_id: string;
+    request_id: string;
+    version: number;
+    price_minor_units: string;
+    currency_code: string;
+    duration_minutes: number;
+    start_time: Date;
+    end_time: Date;
+    addons_snapshot: Array<{ addonId?: string }> | null;
+}
+
+const VERSION_COLUMNS = `request_version_id, request_id, version, price_minor_units,
+                         currency_code, duration_minutes, start_time, end_time, addons_snapshot`;
+
+function toRequestVersion(row: VersionRow): RequestVersion {
+    return {
+        requestVersionId: row.request_version_id,
+        requestId: row.request_id,
+        version: row.version,
+        priceMinorUnits: Number(row.price_minor_units),
+        currencyCode: row.currency_code,
+        durationMinutes: row.duration_minutes,
+        startTime: row.start_time,
+        endTime: row.end_time,
+        addonIds: (row.addons_snapshot ?? [])
+            .map((a) => a?.addonId)
+            .filter((id): id is string => typeof id === "string")
+    };
 }
 
 export async function loadVersion(
@@ -253,34 +287,33 @@ export async function loadVersion(
     requestId: string,
     version: number
 ): Promise<RequestVersion | null> {
-    const { rows } = await client.query<{
-        request_version_id: string;
-        version: number;
-        price_minor_units: string;
-        currency_code: string;
-        duration_minutes: number;
-        start_time: Date;
-        end_time: Date;
-    }>(
-        `SELECT request_version_id, version, price_minor_units, currency_code,
-                duration_minutes, start_time, end_time
+    const { rows } = await client.query<VersionRow>(
+        `SELECT ${VERSION_COLUMNS}
            FROM core_service_request_version
           WHERE request_id = $1 AND version = $2`,
         [requestId, version]
     );
     const row = rows[0];
-    if (!row) {
-        return null;
-    }
-    return {
-        requestVersionId: row.request_version_id,
-        version: row.version,
-        priceMinorUnits: Number(row.price_minor_units),
-        currencyCode: row.currency_code,
-        durationMinutes: row.duration_minutes,
-        startTime: row.start_time,
-        endTime: row.end_time
-    };
+    return row ? toRequestVersion(row) : null;
+}
+
+/**
+ * G2R-01: adoption must apply the version the validated proposal actually
+ * produced, identified by its own id rather than recomputed as
+ * `current_version + 1`.
+ */
+export async function loadVersionById(
+    client: PoolClient,
+    requestVersionId: string
+): Promise<RequestVersion | null> {
+    const { rows } = await client.query<VersionRow>(
+        `SELECT ${VERSION_COLUMNS}
+           FROM core_service_request_version
+          WHERE request_version_id = $1`,
+        [requestVersionId]
+    );
+    const row = rows[0];
+    return row ? toRequestVersion(row) : null;
 }
 
 /** The version currently authoritative for the request. */
