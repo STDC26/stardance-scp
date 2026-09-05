@@ -20,6 +20,14 @@ import { getIntegrationPool, resetSchema, seedDispatchedAppointment } from "./te
 const RUN = process.env["RUN_INTEGRATION"] === "1";
 const d = RUN ? describe : describe.skip;
 
+// G1R-02: contractor identities are UUIDs (appointments.contractor_id is a
+// UUID column). These fixtures were previously human-readable labels, which
+// aborted the transaction with SQLSTATE 22P02 the moment the webhook path
+// actually reached its UPDATE. Fixed, stable UUIDs — not generated — so a
+// failing run names the same identity every time.
+const CONTRACTOR_LATE_ARRIVAL = "3f2a9c14-6b7d-4e58-9a01-2d5c8e7b4f31";
+const CONTRACTOR_RACE = "8c41d0e7-52b9-4a63-b17f-9e6a3c208d54";
+
 d("Timeout sweep vs. acceptance webhook — same-millisecond race (REQ-OPS-TIMEOUT-09)", () => {
     let pool: Pool;
 
@@ -86,9 +94,9 @@ d("Timeout sweep vs. acceptance webhook — same-millisecond race (REQ-OPS-TIMEO
         const webhookResult = await resolveDispatch(
             pool,
             appointmentId,
-            "contractor-late-arrival",
+            CONTRACTOR_LATE_ARRIVAL,
             "ACCEPT",
-            "WEBHOOK:contractor-late-arrival"
+            `WEBHOOK:${CONTRACTOR_LATE_ARRIVAL}`
         );
         expect(webhookResult.success).toBe(false);
         if (!webhookResult.success && webhookResult.reasonCode === "STALE_STATE") {
@@ -121,9 +129,9 @@ d("Timeout sweep vs. acceptance webhook — same-millisecond race (REQ-OPS-TIMEO
                     resolveDispatch(
                         pool,
                         appointmentId,
-                        "contractor-race",
+                        CONTRACTOR_RACE,
                         "ACCEPT",
-                        "WEBHOOK:contractor-race"
+                        `WEBHOOK:${CONTRACTOR_RACE}`
                     )
                 ]);
 

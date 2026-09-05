@@ -1,10 +1,12 @@
 // Freshline Studio Bali — MSOS Phase 0/1 shared types.
 
+// G1R-01: mirrors the `appointment_status` enum in db/schema.sql. A provider
+// decline is a Dispatch Offer outcome, not a Service Request state, so there
+// is deliberately no CONTRACTOR_DECLINED / PROVIDER_DECLINED member.
 export type AppointmentStatus =
     | "PENDING_ACCEPTANCE"
     | "CONTRACTOR_DISPATCHED"
     | "CONTRACTOR_ACCEPTED"
-    | "CONTRACTOR_DECLINED"
     | "CONFIRMED"
     | "CANCELLED"
     | "EXPIRED_REVERTED";
@@ -37,7 +39,11 @@ export interface RecoveryResult {
 export type DispatchResolutionOutcome =
     | { success: true; appointmentId: string; newStatus: AppointmentStatus; version: number }
     | { success: false; appointmentId: string; reasonCode: "STALE_STATE"; currentStatus: AppointmentStatus }
-    | { success: false; appointmentId: string; reasonCode: "NOT_FOUND" };
+    | { success: false; appointmentId: string; reasonCode: "NOT_FOUND" }
+    // G1R-03: malformed provider/contractor identity is rejected as a
+    // controlled outcome before any SQL is issued, rather than escaping as an
+    // uncontrolled PostgreSQL 22P02 uuid-cast exception.
+    | { success: false; appointmentId: string; reasonCode: "INVALID_PROVIDER_IDENTITY"; message: string };
 
 export interface BookingValidationResult {
     valid: boolean;

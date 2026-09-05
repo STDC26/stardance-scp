@@ -8,8 +8,8 @@
 // vocabulary. No Levenshtein/edit-distance correction, no broad synonym set
 // ("yes"/"ok"/"sure"/"no"), no partial-prefix matching. Every one of those
 // would silently convert a typo, a "yes" about something else in the
-// conversation, or an ambiguous reply into an automated CONTRACTOR_ACCEPTED
-// / CONTRACTOR_DECLINED mutation — which is exactly the failure mode the
+// conversation, or an ambiguous reply into an automated acceptance or
+// offer-release mutation — which is exactly the failure mode the
 // CRITICAL STRESS CHECK in REQ-WHATSAPP-PARSER-02 forbids. Anything that
 // doesn't cleanly match routes to NEEDS_CLARIFICATION for a human to
 // resolve. Widening this vocabulary is a product decision, not a parsing
