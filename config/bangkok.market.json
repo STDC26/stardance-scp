@@ -6,7 +6,8 @@
     "confirmedSources": [],
     "assumptions": [
       "This market's existence/name (\"bangkok\") — inferred from the task prompt only, not from any prior spec",
-      "billing.codePrefix — reused the Bali \"FL\" brand prefix; unconfirmed whether Bangkok ships under the same brand or a distinct billing series",
+      "billing.codePrefix — G2-EXEC-01 set this synthetic market to a DISTINCT \"BKK\" series (was a copy of Bali's \"FL\"). Still unconfirmed as a business fact; its purpose is the G8 smoke proof — a second market whose billing identity differs from the first is what demonstrates Core is consuming configuration rather than carrying Freshline's format as a universal invariant.",
+      "dispatch.acceptanceTimeoutMinutes — G2-EXEC-01 set this to 20 (was a copy of Bali's 15) for the same reason: a differing value proves the dispatch module reads the market config rather than a Core constant. Not a confirmed SLA.",
       "currency — THB/฿/2 decimal digits inferred from country only",
       "timezone — Asia/Bangkok (UTC+7) inferred from country only, NOT the same offset as Bali (Asia/Makassar, UTC+8) — flagged because a naive copy-paste of Bali's config would silently ship the wrong closing-ceiling boundary",
       "operatingHours — copied from Bali's unconfirmed defaults; Bangkok's real business hours have not been provided",
@@ -28,8 +29,8 @@
     "decimalDigits": 2
   },
   "billing": {
-    "codePrefix": "FL",
-    "codePattern": "^FL-[0-9]{6}-[A-Z0-9]{4}$"
+    "codePrefix": "BKK",
+    "codePattern": "^BKK-[0-9]{6}-[A-Z0-9]{4}$"
   },
   "operatingHours": {
     "openingHour": 9,
@@ -37,7 +38,7 @@
     "closingMinute": 0
   },
   "dispatch": {
-    "acceptanceTimeoutMinutes": 15
+    "acceptanceTimeoutMinutes": 20
   },
   "featureFlags": {
     "whatsappParserEnabled": true,
