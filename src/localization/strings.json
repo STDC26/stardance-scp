@@ -1,0 +1,130 @@
+{
+  "_meta": {
+    "schemaVersion": "0.1.0",
+    "status": "DRAFT_TRANSLATION",
+    "note": "First-pass translations, not native-speaker-reviewed. English (en) and Indonesian (id) carry higher confidence given this codebase's existing Bali/Asia-Makassar context; Thai (th), Vietnamese (vi), and Tagalog (tl) are best-effort drafts and MUST be QA'd by a native/fluent speaker before shipping to any customer-facing surface. Do not treat th/vi/tl strings as production-verified.",
+    "languages": {
+      "en": "English",
+      "id": "Bahasa Indonesia",
+      "th": "ไทย (Thai)",
+      "vi": "Tiếng Việt (Vietnamese)",
+      "tl": "Tagalog"
+    },
+    "reviewStatus": {
+      "en": "reviewed",
+      "id": "draft",
+      "th": "draft-needs-native-review",
+      "vi": "draft-needs-native-review",
+      "tl": "draft-needs-native-review"
+    }
+  },
+  "intake": {
+    "step1_serviceSelection": {
+      "en": "Select a Service",
+      "id": "Pilih Layanan",
+      "th": "เลือกบริการ",
+      "vi": "Chọn dịch vụ",
+      "tl": "Pumili ng Serbisyo"
+    },
+    "step2_dateTime": {
+      "en": "Choose Date & Time",
+      "id": "Pilih Tanggal & Waktu",
+      "th": "เลือกวันและเวลา",
+      "vi": "Chọn ngày & giờ",
+      "tl": "Pumili ng Petsa at Oras"
+    },
+    "step3_address": {
+      "en": "Service Address",
+      "id": "Alamat Layanan",
+      "th": "ที่อยู่สำหรับให้บริการ",
+      "vi": "Địa chỉ dịch vụ",
+      "tl": "Address para sa Serbisyo"
+    },
+    "step4_contactDetails": {
+      "en": "Your Contact Information",
+      "id": "Informasi Kontak Anda",
+      "th": "ข้อมูลติดต่อของคุณ",
+      "vi": "Thông tin liên hệ của bạn",
+      "tl": "Iyong Impormasyon sa Pakikipag-ugnayan"
+    },
+    "step5_specialRequests": {
+      "en": "Additional Notes (Optional)",
+      "id": "Catatan Tambahan (Opsional)",
+      "th": "หมายเหตุเพิ่มเติม (ไม่บังคับ)",
+      "vi": "Ghi chú thêm (Không bắt buộc)",
+      "tl": "Karagdagang Tala (Opsyonal)"
+    },
+    "step6_reviewConfirm": {
+      "en": "Review & Confirm Booking",
+      "id": "Tinjau & Konfirmasi Pemesanan",
+      "th": "ตรวจสอบและยืนยันการจอง",
+      "vi": "Xem lại & xác nhận đặt lịch",
+      "tl": "Suriin at Kumpirmahin ang Booking"
+    }
+  },
+  "validation": {
+    "required_field": {
+      "en": "This field is required.",
+      "id": "Kolom ini wajib diisi.",
+      "th": "จำเป็นต้องกรอกข้อมูลนี้",
+      "vi": "Trường này là bắt buộc.",
+      "tl": "Kinakailangan ang field na ito."
+    },
+    "invalid_phone_number": {
+      "en": "Please enter a valid phone number.",
+      "id": "Masukkan nomor telepon yang valid.",
+      "th": "กรุณากรอกหมายเลขโทรศัพท์ที่ถูกต้อง",
+      "vi": "Vui lòng nhập số điện thoại hợp lệ.",
+      "tl": "Mangyaring maglagay ng wastong numero ng telepono."
+    },
+    "invalid_email": {
+      "en": "Please enter a valid email address.",
+      "id": "Masukkan alamat email yang valid.",
+      "th": "กรุณากรอกอีเมลที่ถูกต้อง",
+      "vi": "Vui lòng nhập địa chỉ email hợp lệ.",
+      "tl": "Mangyaring maglagay ng wastong email address."
+    },
+    "closing_ceiling_exceeded": {
+      "en": "This booking would end after closing time. Please choose an earlier start time.",
+      "id": "Pemesanan ini akan berakhir setelah jam tutup. Silakan pilih waktu mulai yang lebih awal.",
+      "th": "การจองนี้จะสิ้นสุดหลังเวลาปิดทำการ กรุณาเลือกเวลาเริ่มต้นที่เร็วขึ้น",
+      "vi": "Lịch đặt này sẽ kết thúc sau giờ đóng cửa. Vui lòng chọn giờ bắt đầu sớm hơn.",
+      "tl": "Ang booking na ito ay matatapos pagkalipas ng oras ng pagsara. Mangyaring pumili ng mas maagang oras ng simula."
+    },
+    "before_opening": {
+      "en": "This time is before we open. Please choose a later start time.",
+      "id": "Waktu ini sebelum kami buka. Silakan pilih waktu mulai yang lebih siang.",
+      "th": "เวลานี้ก่อนเวลาเปิดทำการของเรา กรุณาเลือกเวลาเริ่มต้นที่ช้าลง",
+      "vi": "Thời gian này trước giờ mở cửa của chúng tôi. Vui lòng chọn giờ bắt đầu muộn hơn.",
+      "tl": "Ang oras na ito ay bago pa kami magbukas. Mangyaring pumili ng mas huling oras ng simula."
+    },
+    "service_unavailable": {
+      "en": "This service is currently unavailable.",
+      "id": "Layanan ini saat ini tidak tersedia.",
+      "th": "บริการนี้ไม่พร้อมให้บริการในขณะนี้",
+      "vi": "Dịch vụ này hiện không khả dụng.",
+      "tl": "Kasalukuyang hindi available ang serbisyong ito."
+    },
+    "billing_code_invalid": {
+      "en": "We couldn't recognize that booking code. Please check and try again.",
+      "id": "Kami tidak dapat mengenali kode pemesanan tersebut. Silakan periksa kembali.",
+      "th": "เราไม่สามารถจดจำรหัสการจองนั้นได้ กรุณาตรวจสอบอีกครั้ง",
+      "vi": "Chúng tôi không nhận ra mã đặt lịch đó. Vui lòng kiểm tra lại.",
+      "tl": "Hindi namin makilala ang booking code na iyan. Mangyaring suriin at subukan muli."
+    },
+    "session_expired": {
+      "en": "Your session has expired. Please start again.",
+      "id": "Sesi Anda telah berakhir. Silakan mulai lagi.",
+      "th": "เซสชันของคุณหมดอายุแล้ว กรุณาเริ่มต้นใหม่",
+      "vi": "Phiên của bạn đã hết hạn. Vui lòng bắt đầu lại.",
+      "tl": "Nag-expire na ang iyong session. Mangyaring magsimula muli."
+    },
+    "needs_clarification": {
+      "en": "We couldn't confirm your reply. A team member will follow up shortly.",
+      "id": "Kami tidak dapat mengonfirmasi balasan Anda. Tim kami akan segera menghubungi Anda.",
+      "th": "เราไม่สามารถยืนยันคำตอบของคุณได้ ทีมงานจะติดต่อกลับในไม่ช้า",
+      "vi": "Chúng tôi không thể xác nhận phản hồi của bạn. Đội ngũ hỗ trợ sẽ liên hệ sớm.",
+      "tl": "Hindi namin makumpirma ang iyong sagot. Makikipag-ugnayan sa iyo ang aming team sa lalong madaling panahon."
+    }
+  }
+}

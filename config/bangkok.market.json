@@ -1,0 +1,49 @@
+{
+  "_meta": {
+    "schemaVersion": "0.1.0",
+    "status": "SCAFFOLD_DEFAULT",
+    "note": "No deployment-spec document for a Bangkok/Thailand market exists anywhere in this workspace or on this machine as of 2026-09-04 — this file is a structural scaffold only, built by analogy to config/bali.market.json, not a confirmed launch configuration. Every field is listed in `assumptions`; nothing here should be treated as verified.",
+    "confirmedSources": [],
+    "assumptions": [
+      "This market's existence/name (\"bangkok\") — inferred from the task prompt only, not from any prior spec",
+      "billing.codePrefix — reused the Bali \"FL\" brand prefix; unconfirmed whether Bangkok ships under the same brand or a distinct billing series",
+      "currency — THB/฿/2 decimal digits inferred from country only",
+      "timezone — Asia/Bangkok (UTC+7) inferred from country only, NOT the same offset as Bali (Asia/Makassar, UTC+8) — flagged because a naive copy-paste of Bali's config would silently ship the wrong closing-ceiling boundary",
+      "operatingHours — copied from Bali's unconfirmed defaults; Bangkok's real business hours have not been provided",
+      "dispatch.acceptanceTimeoutMinutes — copied from the Bali/REQ-OPS-TIMEOUT-09 value; unconfirmed whether Bangkok's contractor network needs a different SLA",
+      "featureFlags.killSwitch=true and autoDispatchEnabled=false — a deliberate SAFE-BY-DEFAULT choice for an unlaunched market with no confirmed config, not a spec value. Flip only after a human confirms this market is ready for live automated dispatch."
+    ]
+  },
+  "marketId": "bangkok",
+  "displayName": "Freshline Studio — Bangkok (PRE-LAUNCH SCAFFOLD)",
+  "status": "PRE_LAUNCH",
+  "countryCode": "TH",
+  "region": "Southeast Asia",
+  "timezone": "Asia/Bangkok",
+  "locale": "th-TH",
+  "supportedLocales": ["th-TH", "en-US"],
+  "currency": {
+    "code": "THB",
+    "symbol": "฿",
+    "decimalDigits": 2
+  },
+  "billing": {
+    "codePrefix": "FL",
+    "codePattern": "^FL-[0-9]{6}-[A-Z0-9]{4}$"
+  },
+  "operatingHours": {
+    "openingHour": 9,
+    "closingHour": 23,
+    "closingMinute": 0
+  },
+  "dispatch": {
+    "acceptanceTimeoutMinutes": 15
+  },
+  "featureFlags": {
+    "whatsappParserEnabled": true,
+    "autoTimeoutRecoveryEnabled": true,
+    "autoDispatchEnabled": false,
+    "requireManualReviewOnAmbiguousIntent": true,
+    "killSwitch": true
+  }
+}

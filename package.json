@@ -1,0 +1,31 @@
+{
+  "name": "freshline-msos-phase0-1",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Freshline Studio Bali - MSOS Framework Phase 0/1: timeout recovery, booking window validator, WhatsApp intent parser.",
+  "type": "commonjs",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "scripts": {
+    "build": "tsc -p .",
+    "typecheck": "tsc -p . --noEmit",
+    "test": "vitest run --exclude tests/**/*.integration.test.ts",
+    "test:integration": "RUN_INTEGRATION=1 vitest run tests/timeoutRecovery.integration.test.ts --testTimeout=30000",
+    "test:all": "RUN_INTEGRATION=1 vitest run --testTimeout=30000",
+    "db:test:setup": "psql -h /tmp -p 5432 -U jwairepo -d postgres -v ON_ERROR_STOP=1 -f db/setup_test_db.sql",
+    "db:test:schema": "psql -h /tmp -p 5432 -U jwairepo -v ON_ERROR_STOP=1 -d freshline_msos_test -f db/schema.sql",
+    "db:test:drop": "psql -h /tmp -p 5432 -U jwairepo -d postgres -v ON_ERROR_STOP=1 -c 'DROP DATABASE IF EXISTS freshline_msos_test;'"
+  },
+  "dependencies": {
+    "luxon": "^3.4.4",
+    "pg": "^8.11.5"
+  },
+  "devDependencies": {
+    "@types/luxon": "^3.4.2",
+    "@types/node": "^20.14.0",
+    "@types/pg": "^8.11.6",
+    "typescript": "^5.5.4",
+    "vitest": "^1.6.0"
+  }
+}

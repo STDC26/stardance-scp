@@ -1,0 +1,49 @@
+{
+  "_meta": {
+    "schemaVersion": "0.1.0",
+    "status": "SCAFFOLD_DEFAULT",
+    "note": "No prior deployment-spec document for the Bali market was found anywhere in this workspace or on this machine as of 2026-09-04. Fields listed in `assumptions` below are reasonable engineering defaults, not verified business facts, and must be confirmed by a human before this market is treated as production-authoritative. Everything NOT listed in `assumptions` is ported directly from the Phase 0/1 TypeScript services and is already load-bearing there.",
+    "confirmedSources": [
+      "src/services/bookingValidator.ts (CLOSING_HOUR, STUDIO_TIMEZONE)",
+      "src/services/timeoutRecovery.ts (DEFAULT_TIMEOUT_MINUTES)",
+      "db/schema.sql (billing.codePattern via chk_billing_code_format)"
+    ],
+    "assumptions": [
+      "currency — IDR/Rp/0 decimal digits was never specified; inferred from country only",
+      "operatingHours.openingHour — mirrors the unconfirmed OPENING_HOUR placeholder already flagged in bookingValidator.ts",
+      "featureFlags — defaults chosen to keep Bali's already-live automated behavior unchanged, not sourced from a written flag spec"
+    ]
+  },
+  "marketId": "bali",
+  "displayName": "Freshline Studio — Bali",
+  "status": "ACTIVE",
+  "countryCode": "ID",
+  "region": "Southeast Asia",
+  "timezone": "Asia/Makassar",
+  "locale": "id-ID",
+  "supportedLocales": ["id-ID", "en-US"],
+  "currency": {
+    "code": "IDR",
+    "symbol": "Rp",
+    "decimalDigits": 0
+  },
+  "billing": {
+    "codePrefix": "FL",
+    "codePattern": "^FL-[0-9]{6}-[A-Z0-9]{4}$"
+  },
+  "operatingHours": {
+    "openingHour": 9,
+    "closingHour": 23,
+    "closingMinute": 0
+  },
+  "dispatch": {
+    "acceptanceTimeoutMinutes": 15
+  },
+  "featureFlags": {
+    "whatsappParserEnabled": true,
+    "autoTimeoutRecoveryEnabled": true,
+    "autoDispatchEnabled": true,
+    "requireManualReviewOnAmbiguousIntent": true,
+    "killSwitch": false
+  }
+}
