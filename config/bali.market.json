@@ -6,8 +6,9 @@
     "confirmedSources": [
       "src/services/bookingValidator.ts (CLOSING_HOUR, STUDIO_TIMEZONE)",
       "src/services/timeoutRecovery.ts (DEFAULT_TIMEOUT_MINUTES)",
-      "db/schema.sql (billing.codePattern via chk_billing_code_format)"
+      "src/services/whatsappParser.ts (billing.codePattern via BILLING_CODE_RE)"
     ],
+    "g1r04Note": "db/schema.sql no longer constrains billing-code format: the Freshline `FL-######-XXXX` shape was removed from Core DDL as tenant identity, not platform truth. `billing.codePattern` below is this market's declared format; enforcing it at the application boundary is G2 tenant/market configuration work and is NOT yet wired — src/services/whatsappParser.ts still carries the pattern as a literal.",
     "assumptions": [
       "currency — IDR/Rp/0 decimal digits was never specified; inferred from country only",
       "operatingHours.openingHour — mirrors the unconfirmed OPENING_HOUR placeholder already flagged in bookingValidator.ts",

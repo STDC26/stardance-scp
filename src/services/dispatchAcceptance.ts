@@ -16,9 +16,21 @@ import type { AppointmentStatus, DispatchResolutionOutcome } from "../types";
 
 export type DispatchDecision = "ACCEPT" | "DECLINE";
 
-const DECISION_TO_STATUS: Record<DispatchDecision, AppointmentStatus> = {
+// G1R-03: contractor_id is a UUID column. A malformed identity used to reach
+// Postgres and abort the transaction with SQLSTATE 22P02 ("invalid input
+// syntax for type uuid"), which surfaced to callers as an uncontrolled throw
+// rather than a decision outcome. Shape is validated here, before any SQL is
+// issued, so identity rejection is a first-class DispatchResolutionOutcome.
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+// G1R-01: how each decision resolves the *Service Request* row. ACCEPT binds
+// the provider to the request. DECLINE resolves the Dispatch Offer only — the
+// request itself is released back to PENDING_ACCEPTANCE for re-dispatch,
+// exactly as the timeout sweep releases it. There is no top-level "declined"
+// Service Request state to move into.
+const DECISION_TO_REQUEST_STATUS: Record<DispatchDecision, AppointmentStatus> = {
     ACCEPT: "CONTRACTOR_ACCEPTED",
-    DECLINE: "CONTRACTOR_DECLINED"
+    DECLINE: "PENDING_ACCEPTANCE"
 };
 
 /**
@@ -33,7 +45,16 @@ export async function resolveDispatch(
     decision: DispatchDecision,
     actor: string
 ): Promise<DispatchResolutionOutcome> {
-    const targetStatus = DECISION_TO_STATUS[decision];
+    if (!UUID_RE.test(contractorId)) {
+        return {
+            success: false,
+            appointmentId,
+            reasonCode: "INVALID_PROVIDER_IDENTITY",
+            message: `contractorId ${JSON.stringify(contractorId)} is not a valid UUID`
+        };
+    }
+
+    const targetStatus = DECISION_TO_REQUEST_STATUS[decision];
 
     return withTransaction(
         pool,
@@ -67,15 +88,32 @@ export async function resolveDispatch(
                 };
             }
 
-            const updateResult = await client.query(
-                `UPDATE appointments
-                    SET status = $2,
-                        contractor_id = $3,
-                        version = version + 1
-                  WHERE appointment_id = $1
-                    AND version = $4`,
-                [appointmentId, targetStatus, contractorId, row.version]
-            );
+            // G1R-01: an acceptance binds the provider to the request; a
+            // decline releases the offer, clearing both the provider binding
+            // and the dispatch clock so the sweep and re-dispatch see a clean
+            // PENDING_ACCEPTANCE row. Both paths take the identical version
+            // guard and write exactly one history row.
+            const updateResult =
+                decision === "ACCEPT"
+                    ? await client.query(
+                          `UPDATE appointments
+                              SET status = $2,
+                                  contractor_id = $3,
+                                  version = version + 1
+                            WHERE appointment_id = $1
+                              AND version = $4`,
+                          [appointmentId, targetStatus, contractorId, row.version]
+                      )
+                    : await client.query(
+                          `UPDATE appointments
+                              SET status = $2,
+                                  contractor_id = NULL,
+                                  dispatched_at = NULL,
+                                  version = version + 1
+                            WHERE appointment_id = $1
+                              AND version = $3`,
+                          [appointmentId, targetStatus, row.version]
+                      );
 
             if (updateResult.rowCount === 0) {
                 return {

@@ -11,11 +11,16 @@ BEGIN;
 -- Enumerations
 -- -----------------------------------------------------------------------------
 
+-- G1R-01: a provider decline is an outcome of the *Dispatch Offer*, not a
+-- state of the Service Request. There is deliberately no CONTRACTOR_DECLINED
+-- (or PROVIDER_DECLINED) member here: a declined offer releases the request
+-- back to PENDING_ACCEPTANCE so it can be re-dispatched, and the decline
+-- itself is recorded in appointment_status_history (changed_by + reason).
+-- Offer-level outcome modelling is G2 net-new construction.
 CREATE TYPE appointment_status AS ENUM (
     'PENDING_ACCEPTANCE',      -- newly created, awaiting contractor dispatch
     'CONTRACTOR_DISPATCHED',   -- offer sent to a contractor, awaiting response
     'CONTRACTOR_ACCEPTED',     -- contractor accepted the dispatch
-    'CONTRACTOR_DECLINED',     -- contractor declined the dispatch
     'CONFIRMED',               -- booking confirmed with customer
     'CANCELLED',               -- cancelled by customer/ops
     'EXPIRED_REVERTED'         -- terminal marker retained for audit queries;
@@ -55,7 +60,13 @@ CREATE TABLE service_catalogue (
 
 CREATE TABLE appointments (
     appointment_id    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    billing_code      VARCHAR(14) NOT NULL UNIQUE,
+    -- G1R-04: billing-code *format* is tenant/market identity, not Core
+    -- platform truth. Core stores an opaque, non-empty, unique identifier and
+    -- makes no assumption about prefix, segment count, or length. The
+    -- Freshline `FL-######-XXXX` shape lives in config/<marketId>.market.json
+    -- (`billing.codePattern`); enforcing it at the application boundary is G2
+    -- tenant/market configuration work, not a Core DDL constraint.
+    billing_code      TEXT NOT NULL UNIQUE,
     customer_id       UUID NOT NULL,
     service_id        UUID NOT NULL REFERENCES service_catalogue (service_id),
     contractor_id     UUID,                     -- NULL until dispatched
@@ -69,8 +80,10 @@ CREATE TABLE appointments (
     created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
 
-    CONSTRAINT chk_billing_code_format
-        CHECK (billing_code ~ '^FL-[0-9]{6}-[A-Z0-9]{4}$'),
+    -- Tenant-neutral structural guard only: present, trimmed, bounded.
+    CONSTRAINT chk_billing_code_wellformed
+        CHECK (billing_code = btrim(billing_code)
+               AND length(billing_code) BETWEEN 1 AND 64),
     CONSTRAINT chk_end_after_start
         CHECK (end_time > start_time),
     CONSTRAINT chk_dispatched_at_requires_dispatch_status
@@ -137,7 +150,8 @@ CREATE TABLE whatsapp_inbound_events (
     event_id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     raw_text              TEXT NOT NULL,
     normalized_text       TEXT NOT NULL,
-    parsed_billing_code   VARCHAR(14),
+    parsed_billing_code   TEXT,            -- G1R-04: opaque in Core; see
+                                            -- chk_billing_code_wellformed above
     parsed_intent         whatsapp_intent_state NOT NULL,
     appointment_id        UUID REFERENCES appointments (appointment_id),
     matched               BOOLEAN NOT NULL DEFAULT FALSE,
@@ -150,10 +164,11 @@ CREATE TABLE whatsapp_inbound_events (
     processed_at           TIMESTAMPTZ,
     processing_notes       TEXT,
 
-    CONSTRAINT chk_billing_code_format_if_present
+    CONSTRAINT chk_parsed_billing_code_wellformed_if_present
         CHECK (
             parsed_billing_code IS NULL
-            OR parsed_billing_code ~ '^FL-[0-9]{6}-[A-Z0-9]{4}$'
+            OR (parsed_billing_code = btrim(parsed_billing_code)
+                AND length(parsed_billing_code) BETWEEN 1 AND 64)
         ),
     CONSTRAINT chk_applied_requires_match
         CHECK (NOT applied OR (matched AND parsed_intent <> 'NEEDS_CLARIFICATION'))
