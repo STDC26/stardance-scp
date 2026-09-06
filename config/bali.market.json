@@ -16,6 +16,7 @@
     ]
   },
   "marketId": "bali",
+  "tenantId": "freshline",
   "displayName": "Freshline Studio — Bali",
   "status": "ACTIVE",
   "countryCode": "ID",
@@ -39,6 +40,18 @@
   },
   "dispatch": {
     "acceptanceTimeoutMinutes": 15
+  },
+  "topology": {
+    "supported": ["MOBILE"],
+    "default": "MOBILE"
+  },
+  "bookingWindow": {
+    "minLeadMinutes": 60,
+    "maxAdvanceDays": 60
+  },
+  "offer": {
+    "validityMinutes": 15,
+    "capacityHoldTtlMinutes": 15
   },
   "featureFlags": {
     "whatsappParserEnabled": true,

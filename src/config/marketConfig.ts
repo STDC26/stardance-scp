@@ -12,12 +12,25 @@
 
 import bali from "../../config/bali.market.json";
 import bangkok from "../../config/bangkok.market.json";
+import saigon from "../../config/saigon.market.json";
+import penang from "../../config/penang.market.json";
 
-export type MarketId = "bali" | "bangkok";
+export type MarketId = "bali" | "bangkok" | "saigon" | "penang";
 export type MarketStatus = "ACTIVE" | "PRE_LAUNCH" | "SUSPENDED";
+
+/**
+ * G3: which fulfillment topology a market operates. Topology changes which
+ * constraints apply, never the kernel or the commitment model.
+ */
+export type FulfillmentTopology = "MOBILE" | "INSTORE" | "HYBRID";
 
 export interface MarketConfig {
     marketId: string;
+    /**
+     * G3: the tenant this market belongs to. Capacity, offers and holds are
+     * tenant-scoped; a cross-tenant reference is refused rather than resolved.
+     */
+    tenantId: string;
     displayName: string;
     status: MarketStatus;
     countryCode: string;
@@ -42,6 +55,21 @@ export interface MarketConfig {
     dispatch: {
         acceptanceTimeoutMinutes: number;
     };
+    /** G3: topologies this market is permitted to sell through. */
+    topology: {
+        supported: FulfillmentTopology[];
+        default: FulfillmentTopology;
+    };
+    /** G3: bookable-window policy. A request outside it is not sellable. */
+    bookingWindow: {
+        minLeadMinutes: number;
+        maxAdvanceDays: number;
+    };
+    /** G3: how long a SellableOffer and its CapacityHold stay valid. */
+    offer: {
+        validityMinutes: number;
+        capacityHoldTtlMinutes: number;
+    };
     featureFlags: {
         whatsappParserEnabled: boolean;
         autoTimeoutRecoveryEnabled: boolean;
@@ -53,11 +81,14 @@ export interface MarketConfig {
 
 const REGISTRY: Record<MarketId, MarketConfig> = {
     bali: bali as MarketConfig,
-    bangkok: bangkok as MarketConfig
+    bangkok: bangkok as MarketConfig,
+    saigon: saigon as MarketConfig,
+    penang: penang as MarketConfig
 };
 
 const REQUIRED_TOP_LEVEL_FIELDS: Array<keyof MarketConfig> = [
     "marketId",
+    "tenantId",
     "status",
     "countryCode",
     "timezone",
@@ -66,6 +97,9 @@ const REQUIRED_TOP_LEVEL_FIELDS: Array<keyof MarketConfig> = [
     "billing",
     "operatingHours",
     "dispatch",
+    "topology",
+    "bookingWindow",
+    "offer",
     "featureFlags"
 ];
 
@@ -87,6 +121,27 @@ export function assertValidMarketConfig(config: MarketConfig): void {
             `Market config "${config.marketId}" has a suspicious billing.codePattern that is not anchored (^...$): ${config.billing.codePattern}`
         );
     }
+    // G3: a market must be able to sell through its own declared default.
+    if (!config.topology.supported.includes(config.topology.default)) {
+        throw new Error(
+            `Market config "${config.marketId}" declares default topology ${config.topology.default} which is not in supported [${config.topology.supported.join(", ")}]`
+        );
+    }
+}
+
+/**
+ * G3: whether this market may sell through a topology. Fails closed — an
+ * unlisted topology is refused, never inferred from another market.
+ */
+export function marketSupportsTopology(
+    config: MarketConfig,
+    topology: FulfillmentTopology
+): boolean {
+    if (config.topology.supported.includes("HYBRID")) {
+        // HYBRID means the market is configured for both concrete topologies.
+        return topology === "MOBILE" || topology === "INSTORE" || topology === "HYBRID";
+    }
+    return config.topology.supported.includes(topology);
 }
 
 /**
@@ -111,7 +166,7 @@ export function loadMarketConfig(marketId: MarketId): MarketConfig {
  */
 export function getActiveMarketConfig(env: NodeJS.ProcessEnv = process.env): MarketConfig {
     const marketId = (env["ACTIVE_MARKET"] ?? "bali") as MarketId;
-    if (marketId !== "bali" && marketId !== "bangkok") {
+    if (!Object.prototype.hasOwnProperty.call(REGISTRY, marketId)) {
         throw new Error(
             `ACTIVE_MARKET="${marketId}" is not a recognized market id. Known markets: ${Object.keys(REGISTRY).join(", ")}`
         );

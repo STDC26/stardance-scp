@@ -1,0 +1,61 @@
+{
+  "_meta": {
+    "schemaVersion": "0.3.0",
+    "status": "SYNTHETIC_GENERALIZATION_FIXTURE",
+    "note": "Created by SCP-G3-EXEC-01 as the synthetic InStore generalization market (G3-F). It exists to prove the Service-Commerce Kernel is topology- and tenant-neutral: a DIFFERENT tenant, a DIFFERENT topology (INSTORE rather than Freshline's MOBILE), a DIFFERENT currency, billing series, operating policy and pricing, all reached through the same kernel with no Core fork and no Freshline/Bali literal. Nothing here is a real business configuration and no deployment is implied.",
+    "confirmedSources": [],
+    "assumptions": [
+      "tenantId 'northbeam' — a synthetic tenant distinct from 'freshline', so cross-tenant refusal is provable rather than asserted",
+      "topology INSTORE only — the customer travels to a physical location; this is the deliberate inverse of Bali's MOBILE-only configuration",
+      "billing.codePattern uses an NB- series so no Freshline FL- literal can satisfy this market",
+      "currency VND with 0 decimal digits — chosen to differ from both IDR and THB",
+      "operatingHours and bookingWindow deliberately differ from both Freshline markets so a Core constant could not satisfy all three",
+      "offer.validityMinutes and capacityHoldTtlMinutes differ from Freshline so offer/hold expiry is provably config-derived"
+    ]
+  },
+  "marketId": "saigon",
+  "tenantId": "northbeam",
+  "displayName": "Northbeam Barbering — Saigon (SYNTHETIC INSTORE FIXTURE)",
+  "status": "ACTIVE",
+  "countryCode": "VN",
+  "region": "Southeast Asia",
+  "timezone": "Asia/Ho_Chi_Minh",
+  "locale": "vi-VN",
+  "supportedLocales": ["vi-VN", "en-US"],
+  "currency": {
+    "code": "VND",
+    "symbol": "₫",
+    "decimalDigits": 0
+  },
+  "billing": {
+    "codePrefix": "NB",
+    "codePattern": "^NB-[0-9]{6}-[A-Z0-9]{4}$"
+  },
+  "operatingHours": {
+    "openingHour": 10,
+    "closingHour": 20,
+    "closingMinute": 30
+  },
+  "dispatch": {
+    "acceptanceTimeoutMinutes": 25
+  },
+  "topology": {
+    "supported": ["INSTORE"],
+    "default": "INSTORE"
+  },
+  "bookingWindow": {
+    "minLeadMinutes": 30,
+    "maxAdvanceDays": 14
+  },
+  "offer": {
+    "validityMinutes": 5,
+    "capacityHoldTtlMinutes": 5
+  },
+  "featureFlags": {
+    "whatsappParserEnabled": false,
+    "autoTimeoutRecoveryEnabled": true,
+    "autoDispatchEnabled": false,
+    "requireManualReviewOnAmbiguousIntent": true,
+    "killSwitch": false
+  }
+}
