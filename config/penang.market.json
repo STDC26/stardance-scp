@@ -1,0 +1,59 @@
+{
+  "_meta": {
+    "schemaVersion": "0.3.0",
+    "status": "SYNTHETIC_TOPOLOGY_NEUTRALITY_FIXTURE",
+    "note": "Created by SCP-G3-EXEC-01 for the G3-G Hybrid neutrality smoke proof: one market configured to sell the SAME service both MOBILE and INSTORE, so topology neutrality can be shown under a single permitted configuration. Bangkok was not used for this — it is a documented PRE_LAUNCH scaffold whose killSwitch=true and autoDispatchEnabled=false are deliberate safe-by-default choices, and flipping them to make a proof pass would destroy the meaning of those flags. Nothing here is a real business configuration.",
+    "confirmedSources": [],
+    "assumptions": [
+      "Every field is synthetic. The market exists only to exercise HYBRID topology.",
+      "tenantId 'freshline' — deliberately the SAME tenant as Bali, so the proof separates topology neutrality from tenant separation rather than conflating the two.",
+      "billing.codePattern uses a PG- series distinct from FL- and NB-.",
+      "operatingHours are wide (08:00-22:00) so topology, not the clock, is what the Hybrid proof exercises."
+    ]
+  },
+  "marketId": "penang",
+  "tenantId": "freshline",
+  "displayName": "Freshline — Penang (SYNTHETIC HYBRID FIXTURE)",
+  "status": "ACTIVE",
+  "countryCode": "MY",
+  "region": "Southeast Asia",
+  "timezone": "Asia/Kuala_Lumpur",
+  "locale": "ms-MY",
+  "supportedLocales": ["ms-MY", "en-US"],
+  "currency": {
+    "code": "MYR",
+    "symbol": "RM",
+    "decimalDigits": 2
+  },
+  "billing": {
+    "codePrefix": "PG",
+    "codePattern": "^PG-[0-9]{6}-[A-Z0-9]{4}$"
+  },
+  "operatingHours": {
+    "openingHour": 8,
+    "closingHour": 22,
+    "closingMinute": 0
+  },
+  "dispatch": {
+    "acceptanceTimeoutMinutes": 15
+  },
+  "topology": {
+    "supported": ["MOBILE", "INSTORE", "HYBRID"],
+    "default": "HYBRID"
+  },
+  "bookingWindow": {
+    "minLeadMinutes": 45,
+    "maxAdvanceDays": 30
+  },
+  "offer": {
+    "validityMinutes": 12,
+    "capacityHoldTtlMinutes": 12
+  },
+  "featureFlags": {
+    "whatsappParserEnabled": true,
+    "autoTimeoutRecoveryEnabled": true,
+    "autoDispatchEnabled": true,
+    "requireManualReviewOnAmbiguousIntent": true,
+    "killSwitch": false
+  }
+}

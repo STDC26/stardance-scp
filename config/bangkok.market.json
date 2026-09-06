@@ -16,6 +16,7 @@
     ]
   },
   "marketId": "bangkok",
+  "tenantId": "freshline",
   "displayName": "Freshline Studio — Bangkok (PRE-LAUNCH SCAFFOLD)",
   "status": "PRE_LAUNCH",
   "countryCode": "TH",
@@ -39,6 +40,18 @@
   },
   "dispatch": {
     "acceptanceTimeoutMinutes": 20
+  },
+  "topology": {
+    "supported": ["MOBILE", "INSTORE", "HYBRID"],
+    "default": "MOBILE"
+  },
+  "bookingWindow": {
+    "minLeadMinutes": 90,
+    "maxAdvanceDays": 45
+  },
+  "offer": {
+    "validityMinutes": 10,
+    "capacityHoldTtlMinutes": 10
   },
   "featureFlags": {
     "whatsappParserEnabled": true,

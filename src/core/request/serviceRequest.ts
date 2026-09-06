@@ -200,6 +200,84 @@ export async function createServiceRequest(
     });
 }
 
+/**
+ * G3: creates a request from an ALREADY-FROZEN commercial snapshot.
+ *
+ * `createServiceRequest` prices from the live catalogue, which is right at
+ * intake. A Service-Commerce Kernel commit must instead use the terms the
+ * customer was actually offered, so this variant takes the snapshot as input
+ * and never re-reads price or duration. That is what makes "no silent
+ * repricing during commit" structural rather than a matter of discipline.
+ *
+ * Request creation stays owned by this module; the kernel does not write
+ * core_service_request directly.
+ */
+export async function createServiceRequestFromSnapshot(
+    client: PoolClient,
+    input: {
+        marketId: string;
+        customerIdentityId: string;
+        serviceId: string;
+        startTime: Date;
+        endTime: Date;
+        snapshot: {
+            priceVersionId: string;
+            priceMinorUnits: number;
+            currencyCode: string;
+            durationMinutes: number;
+            addons: unknown[];
+        };
+    },
+    actor: Actor,
+    idempotencyKey: string,
+    governingRef: string
+): Promise<GovernedOutcome<{ requestId: string; version: number }>> {
+    const ids = requireUuids({
+        customerIdentityId: input.customerIdentityId,
+        serviceId: input.serviceId
+    });
+    if (!ids.ok) {
+        return ids;
+    }
+
+    const requestRows = await client.query<{ request_id: string }>(
+        `INSERT INTO core_service_request
+            (market_id, customer_identity_id, service_id, state, current_version, lock_version)
+         VALUES ($1, $2, $3, 'PENDING_ACCEPTANCE', 1, 1)
+         RETURNING request_id`,
+        [input.marketId, input.customerIdentityId, input.serviceId]
+    );
+    const requestId = requestRows.rows[0]!.request_id;
+
+    await insertVersion(
+        client,
+        requestId,
+        1,
+        { serviceId: input.serviceId, ...input.snapshot },
+        input.startTime,
+        input.endTime
+    );
+
+    await recordEvent(client, {
+        marketId: input.marketId,
+        objectType: "SERVICE_REQUEST",
+        objectId: requestId,
+        fromState: null,
+        toState: "PENDING_ACCEPTANCE",
+        actor,
+        governingRef,
+        idempotencyKey,
+        payload: {
+            priceMinorUnits: input.snapshot.priceMinorUnits,
+            currencyCode: input.snapshot.currencyCode,
+            durationMinutes: input.snapshot.durationMinutes,
+            pricedFrom: "SELLABLE_OFFER_SNAPSHOT"
+        }
+    });
+
+    return succeed({ requestId, version: 1 });
+}
+
 /** Writes an immutable request version row. Never updates an existing one. */
 export async function insertVersion(
     client: PoolClient,
