@@ -74,12 +74,22 @@ export async function confirmBooking(
         return moved;
     }
 
+    // G4 added a monotonic context_version to this table. A request that is
+    // confirmed, superseded by an amendment and confirmed again produces a
+    // second context, so the version must advance rather than collide on 1.
+    const priorContext = await client.query<{ context_version: number }>(
+        `SELECT context_version FROM core_customer_confirmation
+          WHERE request_id = $1 ORDER BY context_version DESC LIMIT 1`,
+        [input.requestId]
+    );
+    const contextVersion = (priorContext.rows[0]?.context_version ?? 0) + 1;
+
     const inserted = await client.query<{ confirmation_id: string }>(
         `INSERT INTO core_customer_confirmation
-            (request_id, confirmed_version, confirmed_by_identity_id)
-         VALUES ($1, $2, $3)
+            (request_id, confirmed_version, confirmed_by_identity_id, status, context_version)
+         VALUES ($1, $2, $3, 'CONFIRMED', $4)
          RETURNING confirmation_id`,
-        [input.requestId, input.confirmedVersion, input.identityId]
+        [input.requestId, input.confirmedVersion, input.identityId, contextVersion]
     );
     const confirmationId = inserted.rows[0]!.confirmation_id;
 
@@ -106,8 +116,12 @@ export async function supersedeConfirmation(
     requestId: string
 ): Promise<string | null> {
     const { rows } = await client.query<{ confirmation_id: string }>(
-        `UPDATE core_customer_confirmation SET superseded_at = now()
-          WHERE request_id = $1 AND superseded_at IS NULL
+        // G4: `status` is now the authoritative discriminator for a live
+        // context, so a supersession must move it too — otherwise the row would
+        // still satisfy uq_confirmation_single_active and block the next one.
+        `UPDATE core_customer_confirmation
+            SET superseded_at = now(), status = 'SUPERSEDED'
+          WHERE request_id = $1 AND status IN ('PENDING', 'CONFIRMED')
       RETURNING confirmation_id`,
         [requestId]
     );
@@ -120,7 +134,7 @@ export async function activeConfirmation(
 ): Promise<{ confirmationId: string; confirmedVersion: number } | null> {
     const { rows } = await client.query<{ confirmation_id: string; confirmed_version: number }>(
         `SELECT confirmation_id, confirmed_version FROM core_customer_confirmation
-          WHERE request_id = $1 AND superseded_at IS NULL`,
+          WHERE request_id = $1 AND status = 'CONFIRMED'`,
         [requestId]
     );
     const row = rows[0];

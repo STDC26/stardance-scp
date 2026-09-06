@@ -25,7 +25,36 @@ export type AmendmentState =
     | "REJECTED"
     | "WITHDRAWN";
 
-export type DispatchOfferState = "OFFERED" | "ACCEPTED" | "DECLINED" | "EXPIRED" | "WITHDRAWN";
+/**
+ * Mirrors the `dispatch_offer_state` enum. G4 reads these as DispatchAttempt
+ * dispositions: OFFERED = OPEN, DECLINED = REJECTED.
+ */
+export type DispatchOfferState =
+    | "OFFERED"
+    | "ACCEPTED"
+    | "DECLINED"
+    | "EXPIRED"
+    | "WITHDRAWN"
+    | "SUPERSEDED";
+
+/** Mirrors `assignment_status`. Exactly one ACTIVE assignment per request. */
+export type AssignmentStatus = "ACTIVE" | "REPLACED" | "REVOKED";
+
+/** Mirrors `confirmation_context_status`. */
+export type ConfirmationContextStatus =
+    | "PENDING"
+    | "CONFIRMED"
+    | "EXPIRED"
+    | "SUPERSEDED"
+    | "WITHDRAWN";
+
+/** Mirrors `operational_recovery_status`. Recovery is evidence, not an owner. */
+export type OperationalRecoveryStatus =
+    | "OPEN"
+    | "RECOVERED_WITHIN_COMMITMENT"
+    | "AMENDMENT_REQUIRED"
+    | "TERMINAL_UNABLE_TO_FULFILL"
+    | "CANCELLED";
 
 /**
  * Mirrors the `capacity_hold_state` enum. HELD/COMMITTED are the G2

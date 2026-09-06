@@ -51,6 +51,14 @@ export function localSlot(marketId: MarketId, daysAhead: number, hour: number): 
 }
 
 let seq = 0;
+// Fixture instances must be unique: several worlds can be seeded inside one
+// test, and service-area keys carry a (tenant, market, area_key) unique index.
+let worldSeq = 0;
+function nextWorldSuffix(): string {
+    worldSeq += 1;
+    return String(worldSeq).padStart(3, "0");
+}
+
 export function idem(prefix: string): string {
     seq += 1;
     return `${prefix}:${seq}`;
@@ -149,7 +157,7 @@ export async function seedMobileWorld(client: PoolClient): Promise<MobileWorld> 
         [serviceId]
     );
 
-    const serviceAreaKey = "SEMINYAK";
+    const serviceAreaKey = `SEMINYAK-${nextWorldSuffix()}`;
     await client.query(
         `INSERT INTO core_service_area (tenant_id, market_id, area_key) VALUES ($1, $2, $3)`,
         [tenantId, marketId, serviceAreaKey]
@@ -377,7 +385,7 @@ export async function seedHybridWorld(client: PoolClient): Promise<HybridWorld> 
         [serviceId]
     );
 
-    const serviceAreaKey = "SUKHUMVIT";
+    const serviceAreaKey = `SUKHUMVIT-${nextWorldSuffix()}`;
     await client.query(
         `INSERT INTO core_service_area (tenant_id, market_id, area_key) VALUES ($1, $2, $3)`,
         [tenantId, marketId, serviceAreaKey]
