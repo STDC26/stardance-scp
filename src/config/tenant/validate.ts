@@ -9,12 +9,20 @@
 //   * measurement lineage cannot be switched off
 //   * no CLAD-specific inferred state may enter Core configuration
 //   * legacy `appointments` may never be named as canonical authority
+//
+// CORR-01: the PRIMARY semantic control is now the closed schema in schema.ts —
+// an allowlist, so an undeclared field is rejected regardless of what it is
+// called. The prohibited-token scan below is retained only as defense-in-depth.
+// CORR-02: every load-bearing OPERATIONS authority flag is an executable
+// invariant; it must be present AND true, and the closed schema prevents an
+// alternate field or path being used to override it.
 
 import {
     CONFIGURATION_PLANES,
     TENANT_CONFIG_SCHEMA_VERSION,
     type TenantConfigurationBundle
 } from "./contract";
+import { checkAgainstSchema } from "./schema";
 
 export interface ValidationFinding {
     code: string;
@@ -59,6 +67,11 @@ export function validateTenantConfiguration(
     const findings: ValidationFinding[] = [];
     const fail = (code: string, path: string, message: string) =>
         findings.push({ code, path, message });
+
+    // --- closed schema: undeclared fields are rejected anywhere, at any depth
+    for (const violation of checkAgainstSchema(bundle)) {
+        fail(violation.code, violation.path, violation.message);
+    }
 
     // --- schema envelope ---------------------------------------------------
     if (bundle.schemaVersion !== TENANT_CONFIG_SCHEMA_VERSION) {
@@ -248,48 +261,62 @@ export function validateTenantConfiguration(
     }
 
     // --- OPERATIONS: canonical invariants may not be configured away -------
-    const lifecycle = planes.OPERATIONS.lifecycle;
-    if (!lifecycle.providerAcceptanceDoesNotAssign) {
-        fail(
-            "CANONICAL_AUTHORITY_CONTRADICTION",
-            "planes.OPERATIONS.lifecycle.providerAcceptanceDoesNotAssign",
-            "provider acceptance is never assignment"
-        );
-    }
-    if (!lifecycle.ownerAssignmentRequired) {
-        fail(
-            "CANONICAL_AUTHORITY_CONTRADICTION",
-            "planes.OPERATIONS.lifecycle.ownerAssignmentRequired",
-            "owner assignment is a required distinct gate"
-        );
-    }
-    if (!lifecycle.customerConfirmationSeparate) {
-        fail(
-            "CANONICAL_AUTHORITY_CONTRADICTION",
-            "planes.OPERATIONS.lifecycle.customerConfirmationSeparate",
-            "customer confirmation is a separate authority"
-        );
-    }
-    if (!planes.OPERATIONS.provider.approvalRequired) {
-        fail(
-            "CANONICAL_AUTHORITY_CONTRADICTION",
-            "planes.OPERATIONS.provider.approvalRequired",
-            "submitted provider profile is never approved supply"
-        );
-    }
-    if (!planes.OPERATIONS.scheduling.nonOverlapRequired) {
-        fail(
-            "CANONICAL_AUTHORITY_CONTRADICTION",
-            "planes.OPERATIONS.scheduling.nonOverlapRequired",
-            "exclusive-capacity non-overlap is not optional"
-        );
-    }
-    if (!planes.OPERATIONS.recovery.amendmentRequiredForCustomerCommitmentChange) {
-        fail(
-            "CANONICAL_AUTHORITY_CONTRADICTION",
-            "planes.OPERATIONS.recovery.amendmentRequiredForCustomerCommitmentChange",
-            "a customer-facing commitment change requires an Amendment"
-        );
+    //
+    // CORR-02. Every one of these is load-bearing, and each must be present and
+    // true. The previous validator enforced only a subset, so DTS was able to
+    // set ownerConfirmedAvailabilityRequired=false and have it accepted;
+    // strictEligibilityRequired had no rule at all.
+    const operations = planes.OPERATIONS;
+    const REQUIRED_AUTHORITY_INVARIANTS: Array<{ path: string; value: unknown; why: string }> = [
+        {
+            path: "planes.OPERATIONS.provider.approvalRequired",
+            value: operations.provider?.approvalRequired,
+            why: "submitted provider profile is never approved supply"
+        },
+        {
+            path: "planes.OPERATIONS.provider.ownerConfirmedAvailabilityRequired",
+            value: operations.provider?.ownerConfirmedAvailabilityRequired,
+            why: "submitted availability is never owner-confirmed availability"
+        },
+        {
+            path: "planes.OPERATIONS.provider.strictEligibilityRequired",
+            value: operations.provider?.strictEligibilityRequired,
+            why: "eligibility is strict; it may not be relaxed by configuration"
+        },
+        {
+            path: "planes.OPERATIONS.lifecycle.providerAcceptanceDoesNotAssign",
+            value: operations.lifecycle?.providerAcceptanceDoesNotAssign,
+            why: "provider acceptance is never owner assignment"
+        },
+        {
+            path: "planes.OPERATIONS.lifecycle.ownerAssignmentRequired",
+            value: operations.lifecycle?.ownerAssignmentRequired,
+            why: "owner assignment is a required distinct gate"
+        },
+        {
+            path: "planes.OPERATIONS.lifecycle.customerConfirmationSeparate",
+            value: operations.lifecycle?.customerConfirmationSeparate,
+            why: "owner assignment is never customer confirmation"
+        },
+        {
+            path: "planes.OPERATIONS.scheduling.nonOverlapRequired",
+            value: operations.scheduling?.nonOverlapRequired,
+            why: "exclusive-capacity non-overlap is not optional"
+        },
+        {
+            path: "planes.OPERATIONS.recovery.amendmentRequiredForCustomerCommitmentChange",
+            value: operations.recovery?.amendmentRequiredForCustomerCommitmentChange,
+            why: "a customer-facing commitment change requires a canonical Amendment"
+        }
+    ];
+    for (const invariant of REQUIRED_AUTHORITY_INVARIANTS) {
+        if (invariant.value !== true) {
+            fail(
+                "CANONICAL_AUTHORITY_CONTRADICTION",
+                invariant.path,
+                `must be true — ${invariant.why}`
+            );
+        }
     }
 
     // --- EXPERIENCE: channel carries intent, never state --------------------

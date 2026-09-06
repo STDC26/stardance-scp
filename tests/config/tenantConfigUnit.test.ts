@@ -350,3 +350,197 @@ describe("G5-B — reproducibility", () => {
         );
     });
 });
+
+// =============================================================================
+// SCP-G5-B-CORR-01 — corrections proven by DTS
+// =============================================================================
+
+describe("CORR-01 — CLAD/Core separation is a closed schema, not a denylist", () => {
+    const withField = (mutate: (b: TenantConfigurationBundle) => void) => {
+        const b = cloneBundle(FRESHLINE_BALI_V1);
+        mutate(b);
+        return validateTenantConfiguration(b);
+    };
+
+    // The exact fields DTS smuggled past the old fixed token list.
+    it("rejects commitmentStrength", () => {
+        const r = withField((b) => {
+            (b.planes.OPERATIONS as unknown as Record<string, unknown>)["commitmentStrength"] = 0.9;
+        });
+        expect(r.valid).toBe(false);
+        expect(r.findings.map((f) => f.code)).toContain("UNDECLARED_FIELD");
+    });
+
+    it("rejects inferredConfidence", () => {
+        const r = withField((b) => {
+            (b.planes.EXPERIENCE as unknown as Record<string, unknown>)["inferredConfidence"] = 0.7;
+        });
+        expect(r.valid).toBe(false);
+        expect(r.findings.map((f) => f.code)).toContain("UNDECLARED_FIELD");
+    });
+
+    it("rejects learningQuality at the top level", () => {
+        const r = withField((b) => {
+            (b as unknown as Record<string, unknown>)["learningQuality"] = "HIGH";
+        });
+        expect(r.valid).toBe(false);
+        expect(r.findings.map((f) => f.code)).toContain("UNDECLARED_FIELD");
+    });
+
+    it("rejects learningQuality nested four levels deep", () => {
+        const r = withField((b) => {
+            (b.planes.EXPERIENCE.provider.bilingual as unknown as Record<string, unknown>)[
+                "learningQuality"
+            ] = "HIGH";
+        });
+        expect(r.valid).toBe(false);
+        const finding = r.findings.find((f) => f.code === "UNDECLARED_FIELD");
+        expect(finding!.path).toBe("planes.EXPERIENCE.provider.bilingual.learningQuality");
+    });
+
+    it("rejects every representative CLAD-adjacent inferred/profiling field", () => {
+        const smuggled: Array<[string, (b: TenantConfigurationBundle) => void]> = [
+            ["psychologicalProfile", (b) => set(b.planes.EXPERIENCE.customer, "psychologicalProfile", {})],
+            ["emotionalState", (b) => set(b.planes.EXPERIENCE.customer, "emotionalState", "CALM")],
+            ["behaviorPrediction", (b) => set(b.planes.OPERATIONS, "behaviorPrediction", "LIKELY")],
+            ["customerSentiment", (b) => set(b.measurement, "customerSentiment", 0.5)],
+            ["userProfile", (b) => set(b.planes.BRAND, "userProfile", {})],
+            ["engagementScore", (b) => set(b.planes.MARKET, "engagementScore", 42)],
+            // Names nobody put on any list — the point of an allowlist.
+            ["loyaltyPropensityIndex", (b) => set(b.planes.OPERATIONS, "loyaltyPropensityIndex", 3)],
+            ["churnRisk", (b) => set(b.planes.MARKET, "churnRisk", "LOW")],
+            ["adaptationSignal", (b) => set(b.measurement, "adaptationSignal", 1)]
+        ];
+        for (const [name, mutate] of smuggled) {
+            const r = withField(mutate);
+            expect(r.valid, `${name} must be rejected`).toBe(false);
+            expect(r.findings.map((f) => f.code)).toContain("UNDECLARED_FIELD");
+        }
+    });
+
+    it("rejects an undeclared field even inside an inactive capability", () => {
+        const r = withField((b) => {
+            set(b.planes.COMMERCE.locationDynamicPricing, "inferredDemandCurve", [1, 2, 3]);
+        });
+        expect(r.valid).toBe(false);
+        expect(r.findings.map((f) => f.code)).toContain("UNDECLARED_FIELD");
+    });
+
+    // Positive controls: the declared boundary must keep working.
+    it("accepts the canonical bundle with measurement.cladConstraints", () => {
+        expect(FRESHLINE_BALI_V1.measurement.cladConstraints).toEqual({
+            cladSpecificInferredStatesInScpCore: false,
+            psychologicalProfileFields: false,
+            transactionalAuthority: false
+        });
+        expect(validateFreshline().valid).toBe(true);
+    });
+
+    it("accepts the canonical bundle with measurement.projectionBoundaries", () => {
+        expect(FRESHLINE_BALI_V1.measurement.projectionBoundaries["cladStar"]).toBe(
+            "FUTURE_GOVERNED_EVIDENCE_INTERPRETATION_ONLY"
+        );
+        expect(validateFreshline().valid).toBe(true);
+    });
+
+    it("a projection boundary can never become an authority grant", () => {
+        const r = withField((b) => {
+            b.measurement.projectionBoundaries["cladStar"] = "AUTHORITATIVE";
+        });
+        expect(r.valid).toBe(false);
+        expect(r.findings.map((f) => f.code)).toContain("VALUE_NOT_PERMITTED");
+    });
+
+    it("does NOT over-block ordinary text that happens to mention psychology", () => {
+        const b = cloneBundle(FRESHLINE_BALI_V1);
+        b.planes.BRAND.tagline = "A haircut is emotional. Your personality, your Freshline.";
+        b.planes.MARKET.coverage.regions = [...b.planes.MARKET.coverage.regions, "Sentiment Bay"];
+        b.planes.EXPERIENCE.providerExperience.displayIdPrefixes["PS"] = "Psychology-informed stylist";
+        // Values, not schema fields: no inferred state is created, so these pass.
+        expect(validateTenantConfiguration(b).valid).toBe(true);
+    });
+});
+
+describe("CORR-02 — every load-bearing authority flag is an executable invariant", () => {
+    const REQUIRED_FLAGS: Array<[string, (b: TenantConfigurationBundle) => void]> = [
+        ["provider.approvalRequired", (b) => (b.planes.OPERATIONS.provider.approvalRequired = false)],
+        [
+            "provider.ownerConfirmedAvailabilityRequired",
+            (b) => (b.planes.OPERATIONS.provider.ownerConfirmedAvailabilityRequired = false)
+        ],
+        [
+            "provider.strictEligibilityRequired",
+            (b) => (b.planes.OPERATIONS.provider.strictEligibilityRequired = false)
+        ],
+        [
+            "lifecycle.providerAcceptanceDoesNotAssign",
+            (b) => (b.planes.OPERATIONS.lifecycle.providerAcceptanceDoesNotAssign = false)
+        ],
+        [
+            "lifecycle.ownerAssignmentRequired",
+            (b) => (b.planes.OPERATIONS.lifecycle.ownerAssignmentRequired = false)
+        ],
+        [
+            "lifecycle.customerConfirmationSeparate",
+            (b) => (b.planes.OPERATIONS.lifecycle.customerConfirmationSeparate = false)
+        ],
+        [
+            "scheduling.nonOverlapRequired",
+            (b) => (b.planes.OPERATIONS.scheduling.nonOverlapRequired = false)
+        ],
+        [
+            "recovery.amendmentRequiredForCustomerCommitmentChange",
+            (b) => (b.planes.OPERATIONS.recovery.amendmentRequiredForCustomerCommitmentChange = false)
+        ]
+    ];
+
+    it("rejects every required invariant set to false", () => {
+        for (const [name, mutate] of REQUIRED_FLAGS) {
+            const b = cloneBundle(FRESHLINE_BALI_V1);
+            mutate(b);
+            const r = validateTenantConfiguration(b);
+            expect(r.valid, `${name}=false must be rejected`).toBe(false);
+            expect(r.findings.map((f) => f.code)).toContain("CANONICAL_AUTHORITY_CONTRADICTION");
+        }
+    });
+
+    it("rejects a required invariant that has been REMOVED", () => {
+        for (const [name, mutate] of REQUIRED_FLAGS) {
+            const b = cloneBundle(FRESHLINE_BALI_V1);
+            mutate(b); // navigate to the right object, then delete the key
+            const path = name.split(".");
+            const parent = (b.planes.OPERATIONS as unknown as Record<string, Record<string, unknown>>)[
+                path[0]!
+            ]!;
+            delete parent[path[1]!];
+            const r = validateTenantConfiguration(b);
+            expect(r.valid, `${name} removed must be rejected`).toBe(false);
+            expect(r.findings.map((f) => f.code)).toContain("MISSING_REQUIRED_FIELD");
+        }
+    });
+
+    it("rejects an attempt to override an invariant through an alternate path", () => {
+        const b = cloneBundle(FRESHLINE_BALI_V1);
+        set(b.planes.OPERATIONS.provider, "ownerConfirmedAvailabilityOverride", true);
+        const r = validateTenantConfiguration(b);
+        expect(r.valid).toBe(false);
+        expect(r.findings.map((f) => f.code)).toContain("UNDECLARED_FIELD");
+    });
+
+    it("still accepts the canonical bundle with all invariants true", () => {
+        const operations = FRESHLINE_BALI_V1.planes.OPERATIONS;
+        expect(operations.provider.approvalRequired).toBe(true);
+        expect(operations.provider.ownerConfirmedAvailabilityRequired).toBe(true);
+        expect(operations.provider.strictEligibilityRequired).toBe(true);
+        expect(operations.lifecycle.providerAcceptanceDoesNotAssign).toBe(true);
+        expect(operations.lifecycle.ownerAssignmentRequired).toBe(true);
+        expect(operations.lifecycle.customerConfirmationSeparate).toBe(true);
+        expect(operations.scheduling.nonOverlapRequired).toBe(true);
+        expect(operations.recovery.amendmentRequiredForCustomerCommitmentChange).toBe(true);
+        expect(validateFreshline().valid).toBe(true);
+    });
+});
+
+function set(target: unknown, key: string, value: unknown): void {
+    (target as Record<string, unknown>)[key] = value;
+}
