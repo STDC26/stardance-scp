@@ -27,7 +27,19 @@ export type AmendmentState =
 
 export type DispatchOfferState = "OFFERED" | "ACCEPTED" | "DECLINED" | "EXPIRED" | "WITHDRAWN";
 
-export type CapacityHoldState = "HELD" | "COMMITTED" | "RELEASED";
+/**
+ * Mirrors the `capacity_hold_state` enum. HELD/COMMITTED are the G2
+ * dispatch-path names; ACTIVE/CONSUMED are their canonical G3 equivalents (see
+ * CAPACITY_HOLD_STATE_ALIAS). All four occupy exclusive capacity.
+ */
+export type CapacityHoldState =
+    | "HELD"
+    | "COMMITTED"
+    | "RELEASED"
+    | "ACTIVE"
+    | "CONSUMED"
+    | "EXPIRED"
+    | "INVALIDATED";
 
 export type FulfillmentResultValue = "SERVICE_COMPLETED" | "NO_SHOW" | "UNABLE_TO_FULFILL";
 
