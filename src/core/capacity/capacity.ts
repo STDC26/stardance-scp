@@ -648,7 +648,7 @@ export async function withdrawProviderCapacity(
 
     const confirmation = await client.query<{ confirmation_id: string }>(
         `SELECT confirmation_id FROM core_customer_confirmation
-          WHERE request_id = $1 AND superseded_at IS NULL`,
+          WHERE request_id = $1 AND status = 'CONFIRMED'`,
         [requestId]
     );
 

@@ -27,18 +27,44 @@ import { buildCommercialSnapshot } from "../catalogue/catalogue";
  */
 const LEGAL_TRANSITIONS: Readonly<Record<ServiceRequestState, readonly ServiceRequestState[]>> =
     Object.freeze({
-        PENDING_ACCEPTANCE: ["PROVIDER_DISPATCHED", "CANCELLED"],
+        // G4 (additive): UNABLE_TO_FULFILL is reachable from every operational
+        // state before fulfillment, because governed recovery can conclude that
+        // the work cannot be delivered at any point after intake. Making it
+        // reachable only from FULFILLMENT_ACTIVE would force a fictitious
+        // service start in order to record an honest failure.
+        PENDING_ACCEPTANCE: ["PROVIDER_DISPATCHED", "CANCELLED", "UNABLE_TO_FULFILL"],
         // Decline and expiry both land back on PENDING_ACCEPTANCE — the offer
         // resolves, the request returns to the dispatch pool.
         PROVIDER_DISPATCHED: ["PROVIDER_ACCEPTED", "PENDING_ACCEPTANCE", "CANCELLED"],
         // Provider acceptance does NOT assign; OWNER_ASSIGNED is a separate act.
-        PROVIDER_ACCEPTED: ["OWNER_ASSIGNED", "PENDING_ACCEPTANCE", "CANCELLED"],
+        PROVIDER_ACCEPTED: ["OWNER_ASSIGNED", "PENDING_ACCEPTANCE", "CANCELLED", "UNABLE_TO_FULFILL"],
         // Owner assignment does NOT confirm; the customer gate is separate.
-        OWNER_ASSIGNED: ["AWAITING_CUSTOMER_CONFIRMATION", "PENDING_ACCEPTANCE", "CANCELLED"],
-        AWAITING_CUSTOMER_CONFIRMATION: ["CUSTOMER_CONFIRMED", "PENDING_ACCEPTANCE", "CANCELLED"],
+        OWNER_ASSIGNED: [
+            "AWAITING_CUSTOMER_CONFIRMATION",
+            "PENDING_ACCEPTANCE",
+            "CANCELLED",
+            "UNABLE_TO_FULFILL"
+        ],
+        AWAITING_CUSTOMER_CONFIRMATION: [
+            "CUSTOMER_CONFIRMED",
+            "PENDING_ACCEPTANCE",
+            "CANCELLED",
+            "UNABLE_TO_FULFILL"
+        ],
         // Back to AWAITING_CUSTOMER_CONFIRMATION when an adopted amendment
         // changed the customer-facing commitment.
-        CUSTOMER_CONFIRMED: ["FULFILLMENT_ACTIVE", "AWAITING_CUSTOMER_CONFIRMATION", "CANCELLED"],
+        //
+        // G4 (additive): NO_SHOW is reachable from CUSTOMER_CONFIRMED because a
+        // no-show is precisely the case where a confirmed booking never became
+        // fulfillment — requiring it to pass through FULFILLMENT_ACTIVE first
+        // would record a service start that did not happen.
+        CUSTOMER_CONFIRMED: [
+            "FULFILLMENT_ACTIVE",
+            "AWAITING_CUSTOMER_CONFIRMATION",
+            "CANCELLED",
+            "NO_SHOW",
+            "UNABLE_TO_FULFILL"
+        ],
         FULFILLMENT_ACTIVE: ["SERVICE_COMPLETED", "NO_SHOW", "UNABLE_TO_FULFILL"],
         SERVICE_COMPLETED: [],
         CANCELLED: [],
