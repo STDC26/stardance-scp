@@ -67,6 +67,11 @@ import {
     withdrawLiveContext
 } from "./confirmationContext";
 import { openRecovery, resolveRecovery, openRecoveryFor } from "./recovery";
+import {
+    isQualificationOutcome,
+    recordQualification,
+    QUALIFICATION_OUTCOMES
+} from "./qualification";
 
 export interface OperationalActionRequest {
     actionType: OperationalActionType;
@@ -125,6 +130,9 @@ function refuse(reasonCode: LifecycleReason, message: string, actor?: Actor): Ha
 
 /** Actions that may never run against a terminal Service Request. */
 const MUTATING_ACTIONS: ReadonlySet<OperationalActionType> = new Set([
+    // A judgement about a terminal request would be a judgement about something
+    // already concluded.
+    "QUALIFY_REQUEST",
     "DISPATCH_PROVIDER",
     "EXPIRE_DISPATCH",
     "RECORD_PROVIDER_ACCEPTANCE",
@@ -445,6 +453,101 @@ async function transition(
 // =============================================================================
 
 const HANDLERS: Record<OperationalActionType, (ctx: HandlerContext) => Promise<HandlerResult>> = {
+    /**
+     * G5-F (additive): the Owner records a judgement about a request.
+     *
+     * It moves nothing. `toState` is null because qualification is not a
+     * lifecycle transition — a serviceable request stays where it is and
+     * becomes eligible to be dispatched, and declining is performed by
+     * CANCEL_SERVICE, which is what actually transitions the request. Keeping
+     * those two acts separate is why an Owner can conclude "not serviceable"
+     * and still owe the customer an explicit, auditable cancellation.
+     */
+    QUALIFY_REQUEST: async (ctx) => {
+        const owner = await ownerActor(ctx);
+        if (isRefusal(owner)) return owner.refusal;
+        const actor = owner;
+
+        const outcome = ctx.payload["outcome"];
+        if (!isQualificationOutcome(outcome)) {
+            return refuse(
+                "CORRELATION_REQUIRED",
+                `outcome must be one of ${QUALIFICATION_OUTCOMES.join(", ")}`,
+                actor
+            );
+        }
+        // A judgement is made about a request awaiting operational attention.
+        // Qualifying something already dispatched, assigned or confirmed would
+        // be a judgement about a decision that has already been acted on.
+        if (ctx.request.state !== "PENDING_ACCEPTANCE") {
+            return refuse(
+                "INVALID_PREDECESSOR_STATE",
+                `qualification requires PENDING_ACCEPTANCE, found ${ctx.request.state}`,
+                actor
+            );
+        }
+        const reasonCode = ctx.payload["reasonCode"];
+        if (outcome === "UNSERVICEABLE" && (typeof reasonCode !== "string" || reasonCode.trim() === "")) {
+            return refuse(
+                "CORRELATION_REQUIRED",
+                "an unserviceable judgement must state a reason",
+                actor
+            );
+        }
+        const note = ctx.payload["note"];
+
+        const recorded = await recordQualification(ctx.client, {
+            requestId: ctx.request.requestId,
+            tenantId: ctx.tenantId,
+            marketId: ctx.request.marketId,
+            outcome,
+            reasonCode: typeof reasonCode === "string" ? reasonCode.trim() : null,
+            note: typeof note === "string" && note.trim() !== "" ? note.trim() : null,
+            observedState: ctx.request.state,
+            decidedByIdentityId: actor.identityId!,
+            actionIdempotencyKey: ctx.idempotencyKey
+        });
+
+        // A SERVICEABLE judgement is the point at which a human with authority
+        // says this is a real customer of this market — which is precisely what
+        // the CUSTOMER role means, and what G3 requires before anything can be
+        // sold to them.
+        //
+        // Demand ingress deliberately grants no role: a contact handle typed
+        // into a public form is self-asserted, and letting a submission grant
+        // itself confirmation authority is exactly what that restraint prevents.
+        // Granting it HERE keeps that protection — the role is conferred by an
+        // Owner, attributably, on an explicit judgement — and is the only place
+        // in the platform where a customer identity becomes eligible.
+        if (outcome === "SERVICEABLE") {
+            await ctx.client.query(
+                `INSERT INTO core_identity_role (identity_id, market_id, role)
+                 VALUES ($1, $2, 'CUSTOMER') ON CONFLICT DO NOTHING`,
+                [ctx.request.customerIdentityId, ctx.request.marketId]
+            );
+        }
+
+        return {
+            accepted: true,
+            actor,
+            fromState: ctx.request.state,
+            // Null: a judgement was recorded, not a transition performed.
+            toState: null,
+            detail: {
+                qualificationId: recorded.qualificationId,
+                sequence: recorded.sequence,
+                outcome: recorded.outcome,
+                reasonCode: recorded.reasonCode,
+                // Stated in the record itself so a reader cannot mistake a
+                // serviceable judgement for a match, an offer or an assignment.
+                requestState: ctx.request.state,
+                matched: false,
+                dispatched: false,
+                assigned: false,
+                customerRoleGranted: outcome === "SERVICEABLE"
+            }
+        };
+    },
     DISPATCH_PROVIDER: async (ctx) => {
         const providerId = ctx.payload["providerId"];
         if (!isUuid(providerId)) {

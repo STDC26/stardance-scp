@@ -41,7 +41,17 @@ export type RuntimeEvidenceKind =
     | "AVAILABILITY_INVALIDATED"
     | "SERVICE_AREA_PROJECTED"
     | "APPROVED_SUPPLY_PROJECTED"
-    | "PROVIDER_MEDIA_STORED";
+    | "PROVIDER_MEDIA_STORED"
+    // G5-F (additive, mirrors migration 014): what the Owner operating boundary
+    // did. Still evidence, still not business truth — core_operational_action
+    // remains the audit authority for every governed action.
+    | "OWNER_SESSION_ISSUED"
+    | "OWNER_COMMAND_ACCEPTED"
+    | "OWNER_COMMAND_REPLAYED"
+    | "OWNER_COMMAND_REFUSED"
+    | "OWNER_QUALIFICATION_RECORDED"
+    | "OWNER_MATCH_EVALUATED"
+    | "OWNER_SUPPLY_SYNCHRONIZED";
 
 export interface RuntimeEvidenceInput {
     kind: RuntimeEvidenceKind;

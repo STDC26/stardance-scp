@@ -17,6 +17,11 @@ import type { ScpRole } from "../core/types";
 import type { LifecycleReason } from "./reasons";
 
 export const OPERATIONAL_ACTION_TYPES = [
+    // G5-F (additive): the Owner's judgement that a request is serviceable,
+    // needs clarification, or is not serviceable. It records a decision and
+    // moves nothing — declining is performed by CANCEL_SERVICE below, which is
+    // what actually transitions the request.
+    "QUALIFY_REQUEST",
     "DISPATCH_PROVIDER",
     "EXPIRE_DISPATCH",
     "RECORD_PROVIDER_ACCEPTANCE",
