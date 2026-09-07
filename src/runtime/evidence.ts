@@ -18,7 +18,14 @@ export type RuntimeEvidenceKind =
     | "PERSISTENCE_VERIFIED"
     | "PERSISTENCE_REFUSED"
     | "ADAPTER_ATTEMPT"
-    | "ADAPTER_RESULT";
+    | "ADAPTER_RESULT"
+    // G5-D (additive, mirrors migration 010): what the customer ingress boundary
+    // did. Still evidence, still not business truth.
+    | "CATALOGUE_PROJECTED"
+    | "DEMAND_INGRESS_ACCEPTED"
+    | "DEMAND_INGRESS_REPLAYED"
+    | "DEMAND_INGRESS_REFUSED"
+    | "CHANNEL_HANDOFF_ATTEMPTED";
 
 export interface RuntimeEvidenceInput {
     kind: RuntimeEvidenceKind;

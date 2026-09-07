@@ -16,7 +16,8 @@
       "th": "draft-needs-native-review",
       "vi": "draft-needs-native-review",
       "tl": "draft-needs-native-review"
-    }
+    },
+    "g5dNote": "SCP-G5-D-01 added the `acknowledgement` and `customer` sections for the Freshline customer surface. English is authored; Indonesian carries the same DRAFT_TRANSLATION status as the rest of this file and must be reviewed by a fluent speaker before any production customer traffic. Thai, Vietnamese and Tagalog are deliberately absent from the new sections: the governed Bali configuration supports en and id only, and inventing unreviewed translations for unsupported locales would be worse than their absence."
   },
   "intake": {
     "step1_serviceSelection": {
@@ -125,6 +126,122 @@
       "th": "เราไม่สามารถยืนยันคำตอบของคุณได้ ทีมงานจะติดต่อกลับในไม่ช้า",
       "vi": "Chúng tôi không thể xác nhận phản hồi của bạn. Đội ngũ hỗ trợ sẽ liên hệ sớm.",
       "tl": "Hindi namin makumpirma ang iyong sagot. Makikipag-ugnayan sa iyo ang aming team sa lalong madaling panahon."
+    }
+  },
+  "acknowledgement": {
+    "headline": {
+      "en": "Request received — nice choice.",
+      "id": "Permintaan diterima — pilihan bagus."
+    },
+    "body": {
+      "en": "Thank you — your request is now with the {brand} team. We're checking availability and will come back to you shortly.",
+      "id": "Terima kasih — permintaan Anda kini ada di tim {brand}. Kami sedang memeriksa ketersediaan dan akan segera menghubungi Anda."
+    },
+    "next_step": {
+      "en": "Keep this reference. Nothing is scheduled yet — we'll message you on WhatsApp as soon as we have a time and a specialist for you.",
+      "id": "Simpan nomor referensi ini. Belum ada jadwal yang ditetapkan — kami akan mengirim pesan WhatsApp begitu kami memiliki waktu dan spesialis untuk Anda."
+    },
+    "next_step_replay": {
+      "en": "We already have this request — this is the same reference, not a second request. Nothing has changed on your side.",
+      "id": "Kami sudah memiliki permintaan ini — ini referensi yang sama, bukan permintaan kedua. Tidak ada yang berubah dari sisi Anda."
+    }
+  },
+  "customer": {
+    "heading_service": {
+      "en": "Choose your service",
+      "id": "Pilih layanan Anda"
+    },
+    "heading_extras": {
+      "en": "Add an extra",
+      "id": "Tambahkan ekstra"
+    },
+    "heading_when": {
+      "en": "When would you like us?",
+      "id": "Kapan Anda ingin kami datang?"
+    },
+    "heading_where": {
+      "en": "Where are you staying?",
+      "id": "Di mana Anda menginap?"
+    },
+    "heading_you": {
+      "en": "About you",
+      "id": "Tentang Anda"
+    },
+    "label_date": {
+      "en": "Date",
+      "id": "Tanggal"
+    },
+    "label_time": {
+      "en": "Preferred time",
+      "id": "Waktu yang diinginkan"
+    },
+    "label_region": {
+      "en": "Area",
+      "id": "Area"
+    },
+    "label_accommodation": {
+      "en": "Accommodation",
+      "id": "Akomodasi"
+    },
+    "label_name": {
+      "en": "Your name",
+      "id": "Nama Anda"
+    },
+    "label_contact": {
+      "en": "WhatsApp number",
+      "id": "Nomor WhatsApp"
+    },
+    "placeholder_contact": {
+      "en": "+62 812 3456 7890",
+      "id": "+62 812 3456 7890"
+    },
+    "submit": {
+      "en": "Send my request",
+      "id": "Kirim permintaan saya"
+    },
+    "submitting": {
+      "en": "Sending…",
+      "id": "Mengirim…"
+    },
+    "optional": {
+      "en": "Optional",
+      "id": "Opsional"
+    },
+    "language": {
+      "en": "Language",
+      "id": "Bahasa"
+    },
+    "reference": {
+      "en": "Your reference",
+      "id": "Referensi Anda"
+    },
+    "duration_suffix": {
+      "en": "min",
+      "id": "mnt"
+    },
+    "open_hours": {
+      "en": "Open daily {open}–{close}",
+      "id": "Buka setiap hari {open}–{close}"
+    },
+    "notice_state": {
+      "en": "Sending this is a request, not a reservation. Our team reviews every one.",
+      "id": "Mengirim ini adalah permintaan, bukan reservasi. Tim kami meninjau setiap permintaan."
+    },
+    "notice_payment": {
+      "en": "No payment is taken online. You settle directly with your specialist.",
+      "id": "Tidak ada pembayaran online. Anda membayar langsung kepada spesialis Anda."
+    },
+    "notice_whatsapp": {
+      "en": "We coordinate over WhatsApp. It is how we reach you — it is not where your request lives.",
+      "id": "Kami berkoordinasi melalui WhatsApp. Itu cara kami menghubungi Anda — bukan tempat permintaan Anda disimpan."
+    },
+    "error_heading": {
+      "en": "We couldn't send that yet",
+      "id": "Kami belum dapat mengirimnya"
+    },
+    "error_generic": {
+      "en": "Something went wrong on our side. Your details are still here — please try again.",
+      "id": "Terjadi kesalahan di pihak kami. Detail Anda masih tersimpan — silakan coba lagi."
     }
   }
 }
