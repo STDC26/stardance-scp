@@ -119,7 +119,10 @@ export type GovernedFailureCode =
     | "PROPOSAL_MISMATCH"
     | "RECONFIRMATION_REQUIRED"
     | "MARKET_UNKNOWN"
-    | "COGNITION_NOT_BINDING";
+    | "COGNITION_NOT_BINDING"
+    // SCP-G5-F-CORR-01 (R39): a governed dispatch was attempted without a
+    // current SERVICEABLE owner qualification.
+    | "QUALIFICATION_REQUIRED";
 
 /**
  * Every governed command returns this. Domain refusals are values, never

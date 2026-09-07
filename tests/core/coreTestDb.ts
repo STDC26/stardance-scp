@@ -5,6 +5,8 @@
 
 import type { Pool, PoolClient } from "pg";
 import { createPool } from "../../src/db/pool";
+import { executeOperationalAction } from "../../src/lifecycle/orchestrator";
+import type { MarketId } from "../../src/config/marketConfig";
 
 export function getCorePool(): Pool {
     return createPool({ database: process.env["PGDATABASE"] ?? "freshline_msos_test" });
@@ -138,4 +140,54 @@ let keySeq = 0;
 export function idemKey(prefix: string): string {
     keySeq += 1;
     return `${prefix}:${keySeq}`;
+}
+
+/**
+ * Records the owner's SERVICEABLE judgement for a request.
+ *
+ * SCP-G5-F-CORR-01 (R39) made a current SERVICEABLE qualification a
+ * precondition of canonical dispatch truth at the authoritative boundary, so a
+ * fixture that dispatches must first qualify — exactly as production does.
+ * It goes through the real orchestrator rather than writing the table, because
+ * a fixture that took a shortcut past the governed envelope would be testing a
+ * path that does not exist.
+ */
+export async function qualifyForDispatch(
+    client: PoolClient,
+    marketId: string,
+    requestId: string,
+    ownerIdentityId?: string
+): Promise<void> {
+    let owner = ownerIdentityId;
+    if (!owner) {
+        const existing = await client.query<{ identity_id: string }>(
+            `SELECT identity_id FROM core_identity_role
+              WHERE market_id = $1 AND role = 'OWNER' LIMIT 1`,
+            [marketId]
+        );
+        owner = existing.rows[0]?.identity_id;
+    }
+    if (!owner) {
+        const created = await client.query<{ identity_id: string }>(
+            `INSERT INTO core_identity (market_id, display_name) VALUES ($1, 'Fixture Owner')
+             RETURNING identity_id`,
+            [marketId]
+        );
+        owner = created.rows[0]!.identity_id;
+        await client.query(
+            `INSERT INTO core_identity_role (identity_id, market_id, role) VALUES ($1, $2, 'OWNER')`,
+            [owner, marketId]
+        );
+    }
+    const outcome = await executeOperationalAction(client, {
+        actionType: "QUALIFY_REQUEST",
+        marketId: marketId as MarketId,
+        requestId,
+        actorIdentityId: owner,
+        idempotencyKey: `fixture-qualify:${requestId}`,
+        payload: { outcome: "SERVICEABLE" }
+    });
+    if (!outcome.ok) {
+        throw new Error(`fixture qualification failed: ${outcome.reasonCode} ${outcome.message}`);
+    }
 }

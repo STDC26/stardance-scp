@@ -121,7 +121,10 @@ describe("G4 — taxonomies are complete", () => {
             expect(LIFECYCLE_REASONS).toContain(code);
             expect(isLifecycleReason(code)).toBe(true);
         }
-        expect(LIFECYCLE_REASONS).toHaveLength(29);
+        // Still an exact closed set — one wider than G4 established, by the
+        // single reason SCP-G5-F-CORR-01 authorized for the R39 invariant.
+        expect(LIFECYCLE_REASONS).toContain("QUALIFICATION_REQUIRED");
+        expect(LIFECYCLE_REASONS).toHaveLength(30);
     });
 
     it("carries the full canonical action taxonomy", () => {

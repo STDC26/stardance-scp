@@ -70,6 +70,7 @@ import { openRecovery, resolveRecovery, openRecoveryFor } from "./recovery";
 import {
     isQualificationOutcome,
     recordQualification,
+    dispatchQualificationBlock,
     QUALIFICATION_OUTCOMES
 } from "./qualification";
 
@@ -567,6 +568,14 @@ const HANDLERS: Record<OperationalActionType, (ctx: HandlerContext) => Promise<H
                 `dispatch requires PENDING_ACCEPTANCE, found ${ctx.request.state}`,
                 actor
             );
+        }
+        // SCP-G5-F-CORR-01 (R39). The owner's serviceability judgement is a
+        // precondition of canonical dispatch truth, enforced HERE rather than at
+        // the Owner command layer — an invariant that depends on every caller
+        // remembering to check it is not an invariant.
+        const blocked = await dispatchQualificationBlock(ctx.client, ctx.request.requestId);
+        if (blocked) {
+            return refuse("QUALIFICATION_REQUIRED", blocked.message, actor);
         }
         const provider = await loadProvider(ctx.client, providerId);
         if (!provider || provider.marketId !== ctx.request.marketId || !isDispatchable(provider)) {

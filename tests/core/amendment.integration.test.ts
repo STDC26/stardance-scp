@@ -10,7 +10,8 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import type { Pool } from "pg";
 import { withTransaction } from "../../src/db/pool";
-import { getCorePool, resetCore, seedWorld, windowStartingInHours, idemKey } from "./coreTestDb";
+import {
+    qualifyForDispatch, getCorePool, resetCore, seedWorld, windowStartingInHours, idemKey } from "./coreTestDb";
 import {
     createServiceRequest,
     loadCurrentVersion,
@@ -76,6 +77,10 @@ async function confirmedBooking(pool: Pool, startHours = 48) {
             idemKey("hold")
         );
 
+        // SCP-G5-F-CORR-01 (R39): dispatch now requires a current SERVICEABLE
+        // owner judgement at the authoritative boundary, so the fixture
+        // records one through the real governed action first.
+        await qualifyForDispatch(client, "bali", requestId);
         const offered = await offerDispatch(
             client,
             { requestId, providerId: world.providerId, marketId: "bali" },

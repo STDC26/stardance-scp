@@ -22,6 +22,7 @@ import {
 import { createSellableOffer } from "../../src/kernel/offer";
 import { commitOffer } from "../../src/kernel/commit";
 import { SYSTEM_ACTOR } from "../../src/core/types";
+import { qualifyForDispatch } from "../core/coreTestDb";
 
 export { localSlot, idem, resetKernel as resetLifecycle, getKernelPool as getLifecyclePool };
 export type { MobileWorld, InStoreWorld, HybridWorld };
@@ -98,7 +99,7 @@ export async function seedCommittedMobile(
 
         return {
             ...world,
-            requestId: committed.value.requestId,
+            requestId: await qualified(client, world.marketId, committed.value.requestId),
             offerId: offered.offer.offerId,
             providerHandle: handles.providerHandle,
             customerHandle: handles.customerHandle
@@ -152,7 +153,7 @@ export async function seedCommittedInStore(pool: Pool): Promise<CommittedInStore
         return {
             ...world,
             ownerIdentityId,
-            requestId: committed.value.requestId,
+            requestId: await qualified(client, world.marketId, committed.value.requestId),
             offerId: offered.offer.offerId
         };
     });
@@ -203,7 +204,7 @@ export async function seedCommittedHybrid(pool: Pool): Promise<CommittedHybrid> 
                 idempotencyKey: idem(`g4-hybrid-commit-${topology}`)
             });
             if (!committed.ok) throw new Error(`commit refused: ${committed.reasonCode}`);
-            return committed.value.requestId;
+            return qualified(client, world.marketId, committed.value.requestId);
         };
 
         return {
@@ -213,4 +214,19 @@ export async function seedCommittedHybrid(pool: Pool): Promise<CommittedHybrid> 
             instoreRequestId: await commitOne("INSTORE", 15)
         };
     });
+}
+
+/**
+ * SCP-G5-F-CORR-01 (R39): a committed request is not dispatchable until an
+ * owner has judged it serviceable. These worlds exist to exercise dispatch and
+ * everything downstream of it, so they carry that judgement — recorded through
+ * the real governed action, not written directly.
+ */
+async function qualified(
+    client: PoolClient,
+    marketId: string,
+    requestId: string
+): Promise<string> {
+    await qualifyForDispatch(client, marketId, requestId);
+    return requestId;
 }
