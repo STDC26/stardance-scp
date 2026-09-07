@@ -5,11 +5,19 @@
 // Core, and nothing under src/core, src/kernel or src/lifecycle imports it.
 
 import freshlineBaliV1 from "../../../config/tenants/freshline-bali.v1.json";
-import type { TenantConfigurationBundle } from "./contract";
+import freshlineBaliV2 from "../../../config/tenants/freshline-bali.v2.json";
+import type { TenantConfigurationBundle, TenantConfigurationBundleV2 } from "./contract";
 import { configurationChecksum, configurationReference } from "./identity";
 import { validateTenantConfiguration, type ValidationResult } from "./validate";
 
 export const FRESHLINE_BALI_V1 = freshlineBaliV1 as unknown as TenantConfigurationBundle;
+
+/**
+ * G5-C configuration version 2. The runtime-governing bundle: the tenant plane
+ * references the canonical SCP market rather than restating it, so R18's
+ * duplicate authority is unrepresentable.
+ */
+export const FRESHLINE_BALI_V2 = freshlineBaliV2 as unknown as TenantConfigurationBundleV2;
 
 export const FRESHLINE_BALI_SCOPE = {
     tenantId: FRESHLINE_BALI_V1.tenant.id,
@@ -27,6 +35,14 @@ export function freshlineReference(): string {
 
 export function validateFreshline(): ValidationResult {
     return validateTenantConfiguration(FRESHLINE_BALI_V1);
+}
+
+export function freshlineV2Checksum(): string {
+    return configurationChecksum(FRESHLINE_BALI_V2 as never);
+}
+
+export function validateFreshlineV2(): ValidationResult {
+    return validateTenantConfiguration(FRESHLINE_BALI_V2);
 }
 
 /**
