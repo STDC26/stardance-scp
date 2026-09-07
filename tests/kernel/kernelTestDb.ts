@@ -83,6 +83,17 @@ async function makeIdentity(
     return identityId;
 }
 
+/**
+ * Declares provider availability for one place.
+ *
+ * `locationId` is the place the window covers: a `core_location` id for
+ * INSTORE, and the governed service-area KEY for MOBILE. That is not a detail —
+ * SCP-G5-E-CORR-01 (R32) made MOBILE eligibility require the requested service
+ * area and the requested interval to be satisfied by the SAME window, so a
+ * MOBILE window recorded against a placeholder rather than the area it actually
+ * covers no longer describes anything sellable. These fixtures now record the
+ * area, exactly as the real provider supply path does.
+ */
 async function seedAvailability(
     client: PoolClient,
     marketId: string,
@@ -163,7 +174,7 @@ export async function seedMobileWorld(client: PoolClient): Promise<MobileWorld> 
         [tenantId, marketId, serviceAreaKey]
     );
 
-    await seedAvailability(client, marketId, providerId, "MOBILE");
+    await seedAvailability(client, marketId, providerId, serviceAreaKey);
 
     return {
         marketId,
@@ -392,7 +403,7 @@ export async function seedHybridWorld(client: PoolClient): Promise<HybridWorld> 
     );
 
     await seedAvailability(client, marketId, providerId, locationId);
-    await seedAvailability(client, marketId, providerId, "MOBILE");
+    await seedAvailability(client, marketId, providerId, serviceAreaKey);
 
     return {
         marketId,
