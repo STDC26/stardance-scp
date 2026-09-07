@@ -69,6 +69,14 @@ export interface EffectiveConfiguration {
     billingCodePattern: ResolvedValue<string>;
     /** Tenant-owned. */
     brandName: string;
+    /**
+     * G5-D (additive): the full tenant BRAND plane and the tenant-owned locale
+     * set, exposed so a customer surface can render them from THIS resolution
+     * rather than opening a second path to the bundle. No canonical market value
+     * is restated here, so R18 is unaffected.
+     */
+    brand: TenantConfigurationBundleV2["planes"]["BRAND"];
+    locales: { default: string; supported: string[] };
     catalogue: TenantConfigurationBundleV2["planes"]["CATALOGUE"];
     commerce: TenantConfigurationBundleV2["planes"]["COMMERCE"];
     operations: TenantConfigurationBundleV2["planes"]["OPERATIONS"];
@@ -233,6 +241,11 @@ export function resolveFromStored(
                 origin: "CANONICAL_MARKET"
             },
             brandName: bundle.planes.BRAND.name,
+            brand: bundle.planes.BRAND,
+            locales: {
+                default: bundle.planes.MARKET.localeDefault,
+                supported: [...bundle.planes.MARKET.supportedLocales]
+            },
             catalogue: bundle.planes.CATALOGUE,
             commerce: bundle.planes.COMMERCE,
             operations: bundle.planes.OPERATIONS,
