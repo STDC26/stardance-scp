@@ -1,0 +1,248 @@
+{
+  "_meta": {
+    "artifact": "SCP-G5-B-01 — Freshline Tenant / Market / Catalogue / Policy Configuration v1.1",
+    "purpose": "Expresses Freshline Bali's accepted behavior entirely as governed SCP configuration. Every value here is tenant configuration, not reusable Core logic: no file under src/core, src/kernel or src/lifecycle reads this bundle.",
+    "ccSuppliedValues": [
+      "planes.CATALOGUE.services[].durationMinutes — NOT present in the accepted-behavior freeze. SCP exclusive-capacity semantics cannot function without a duration, and the G5-B contract directs that service duration defaults be resolved here (G5A-G09). These are engineering defaults chosen to be internally consistent with the price ladder, NOT confirmed business facts, and MUST be confirmed by a human before Freshline transacts against them.",
+      "planes.CATALOGUE.extras[].extraDurationMinutes — same status and same caveat.",
+      "planes.CATALOGUE.*.active — the freeze requires active/inactive state to be configurable but did not state values; all catalogue items are set active, matching current Freshline operation.",
+      "planes.MARKET.supportedLocales / localeDefault — normalized to the freeze's 'en' default with 'id' supported."
+    ],
+    "notCarriedForward": [
+      "Bali geography, operating hours, currency, locale and brand values are deliberately NOT expressed as Core constants. The Core market plane (config/bali.market.json) remains the Core-facing configuration; this bundle is the tenant-facing governed configuration and does not modify it."
+    ]
+  },
+
+  "schemaVersion": "scp.tenant.configuration.v1",
+  "configurationVersion": 1,
+  "environment": "candidate",
+
+  "tenant": {
+    "id": "freshline-bali",
+    "organization": "freshline",
+    "brand": "freshline-studio",
+    "market": "bali",
+    "status": "ACTIVE_CANDIDATE"
+  },
+
+  "planes": {
+    "BRAND": {
+      "name": "Freshline Studio",
+      "publicName": "Freshline",
+      "marketDescriptor": "Bali",
+      "tagline": "Your style, your space, your Freshline.",
+      "design": {
+        "headingFont": "Oswald Bold",
+        "bodyFont": "DM Sans",
+        "colors": {
+          "primaryBlack": "#0B0D0E",
+          "freshlineTeal": "#00AFA5",
+          "tealHover": "#0BB8AE",
+          "silver": "#E7ECEF",
+          "white": "#FFFFFF"
+        }
+      }
+    },
+
+    "MARKET": {
+      "id": "bali",
+      "country": "ID",
+      "timezone": "Asia/Makassar",
+      "localeDefault": "en",
+      "supportedLocales": ["en", "id"],
+      "currency": {
+        "price": "IDR",
+        "display": "IDR"
+      },
+      "operatingHours": {
+        "daily": { "open": "08:00", "close": "23:00" }
+      },
+      "coverage": {
+        "regions": [
+          "Seminyak",
+          "Canggu",
+          "Kuta",
+          "Legian",
+          "Sanur",
+          "Denpasar",
+          "Nusa Dua",
+          "Uluwatu",
+          "Other"
+        ],
+        "customerContext": {
+          "accommodationTypes": ["Hotel", "Villa", "Airbnb"]
+        }
+      }
+    },
+
+    "CATALOGUE": {
+      "services": [
+        {
+          "code": "FRESH_CUT",
+          "name": "The Fresh Cut",
+          "price": { "amount": 350000, "currency": "IDR" },
+          "durationMinutes": 45,
+          "active": true
+        },
+        {
+          "code": "FRESH_CUT_BEARD",
+          "name": "Fresh Cut + Beard",
+          "price": { "amount": 450000, "currency": "IDR" },
+          "durationMinutes": 60,
+          "active": true
+        },
+        {
+          "code": "FULL_FRESH",
+          "name": "The Full Fresh",
+          "price": { "amount": 550000, "currency": "IDR" },
+          "durationMinutes": 90,
+          "active": true
+        }
+      ],
+      "extras": [
+        {
+          "code": "FOOT_MASSAGE",
+          "name": "Foot Massage",
+          "price": { "amount": 200000, "currency": "IDR" },
+          "extraDurationMinutes": 20,
+          "active": true
+        },
+        {
+          "code": "BACK_SHOULDER_MASSAGE",
+          "name": "Back & Shoulder",
+          "price": { "amount": 250000, "currency": "IDR" },
+          "extraDurationMinutes": 25,
+          "active": true
+        },
+        {
+          "code": "FULL_BODY_MASSAGE",
+          "name": "Full Body",
+          "price": { "amount": 350000, "currency": "IDR" },
+          "extraDurationMinutes": 45,
+          "active": true
+        }
+      ]
+    },
+
+    "COMMERCE": {
+      "locationDynamicPricing": {
+        "prepared": true,
+        "active": false,
+        "rules": []
+      },
+      "payment": {
+        "capability": "READY",
+        "active": false,
+        "policy": "OFFLINE",
+        "processorAdapter": {
+          "configured": false,
+          "contractReserved": true
+        },
+        "platformFeePolicy": {
+          "shapeReserved": true,
+          "active": false
+        },
+        "currencies": {
+          "priceCurrency": "IDR",
+          "displayCurrency": "IDR",
+          "chargeCurrency": null,
+          "settlementCurrency": null
+        },
+        "financialAuditBoundary": {
+          "required": true
+        }
+      }
+    },
+
+    "OPERATIONS": {
+      "provider": {
+        "approvalRequired": true,
+        "ownerConfirmedAvailabilityRequired": true,
+        "strictEligibilityRequired": true
+      },
+      "lifecycle": {
+        "ownerQualificationRequired": true,
+        "providerAcceptanceDoesNotAssign": true,
+        "ownerAssignmentRequired": true,
+        "customerConfirmationSeparate": true
+      },
+      "scheduling": {
+        "weekStartsOn": "MONDAY",
+        "nonOverlapRequired": true
+      },
+      "recovery": {
+        "noMatchRecoveryEnabled": true,
+        "reassignmentSupported": true,
+        "amendmentRequiredForCustomerCommitmentChange": true
+      }
+    },
+
+    "EXPERIENCE": {
+      "providerExperience": {
+        "canonicalAggregateTerm": "PROVIDER",
+        "tenantExperienceTerm": "PARTNER",
+        "displayIdPrefixes": {
+          "BB": "Barber",
+          "MS": "Massage Therapist",
+          "NT": "Nail Technician",
+          "FX": "Fresh Experience",
+          "EC": "Ecosystem Partner"
+        },
+        "ratingCommission": {
+          "state": "UNRESOLVED",
+          "active": false
+        }
+      },
+      "customer": {
+        "mobileFirst": true,
+        "regionSelection": "CHIPS",
+        "preferredTimeSelection": "SIMPLIFIED",
+        "whatsappEnabled": true
+      },
+      "provider": {
+        "bilingual": {
+          "default": "en",
+          "supported": ["en", "id"]
+        },
+        "cognitionChips": true,
+        "availabilityChips": true,
+        "vicinityChips": true,
+        "applyToAllDays": true
+      },
+      "owner": {
+        "approvalWorkflows": true,
+        "coverageView": true,
+        "lifecycleCommandView": true
+      },
+      "channels": {
+        "whatsapp": {
+          "enabled": true,
+          "authoritativeStateOwner": false,
+          "adapterRequired": true
+        }
+      }
+    }
+  },
+
+  "measurement": {
+    "canonicalSource": "SCP_EVENTS_AND_RECORDS",
+    "lineage": {
+      "tenantRequired": true,
+      "marketRequired": true
+    },
+    "reporting": {
+      "mayCreateProjections": true,
+      "mayOwnBusinessTruth": false
+    },
+    "projectionBoundaries": {
+      "freshlineOperatingMetrics": "ALLOWED_NON_AUTHORITATIVE_PROJECTION",
+      "stardancePortfolio": "ALLOWED_NON_AUTHORITATIVE_PROJECTION",
+      "cladStar": "FUTURE_GOVERNED_EVIDENCE_INTERPRETATION_ONLY"
+    },
+    "cladConstraints": {
+      "cladSpecificInferredStatesInScpCore": false,
+      "psychologicalProfileFields": false,
+      "transactionalAuthority": false
+    }
+  }
+}
