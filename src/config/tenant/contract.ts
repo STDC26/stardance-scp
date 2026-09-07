@@ -23,6 +23,26 @@ export type ConfigurationPlane = (typeof CONFIGURATION_PLANES)[number];
 
 export const TENANT_CONFIG_SCHEMA_VERSION = "scp.tenant.configuration.v1" as const;
 
+/**
+ * G5-C schema v2 — retires R18.
+ *
+ * v1 let the tenant plane restate values the canonical SCP market plane already
+ * owns (timezone, currency, operating hours), and they drifted: Core declared a
+ * 09:00 opening while the tenant bundle declared 08:00. Two independently
+ * authoritative values for one runtime semantic is precisely the failure mode
+ * R18 named.
+ *
+ * v2 removes those fields from the tenant plane entirely, so a duplicate is not
+ * merely rejected — it is unrepresentable. The tenant plane REFERENCES the
+ * canonical market and may state bounded, explicit APPROVED OVERRIDES. The
+ * runtime resolves one effective configuration from the two.
+ */
+export const TENANT_CONFIG_SCHEMA_VERSION_V2 = "scp.tenant.configuration.v2" as const;
+
+export type TenantConfigSchemaVersion =
+    | typeof TENANT_CONFIG_SCHEMA_VERSION
+    | typeof TENANT_CONFIG_SCHEMA_VERSION_V2;
+
 /** Lifecycle of a configuration bundle version. */
 export const CONFIGURATION_STATES = [
     "DRAFT",
@@ -67,6 +87,63 @@ export interface MarketPlane {
         };
     };
 }
+
+/**
+ * v2 market plane. Deliberately carries NO timezone, currency or operating
+ * hours: those belong to the canonical SCP market configuration referenced by
+ * `marketConfigurationRef`.
+ */
+export interface MarketPlaneV2 {
+    id: string;
+    country: string;
+    localeDefault: string;
+    supportedLocales: string[];
+    /** The canonical SCP market whose configuration is authoritative. */
+    marketConfigurationRef: string;
+    /** Bounded, explicit divergence from the canonical market. */
+    approvedOverrides: {
+        operatingHours: { daily: { open: string; close: string } } | null;
+    };
+    coverage: {
+        regions: string[];
+        customerContext: { accommodationTypes: string[] };
+    };
+}
+
+/** v2 commerce plane: price/display currency are derived, not restated. */
+export interface CommercePlaneV2 {
+    locationDynamicPricing: CommercePlane["locationDynamicPricing"];
+    payment: {
+        capability: PaymentCapability;
+        active: boolean;
+        policy: PaymentPolicy;
+        processorAdapter: { configured: boolean; contractReserved: boolean };
+        platformFeePolicy: { shapeReserved: boolean; active: boolean };
+        currencies: {
+            /** Payment-specific only. Null while payment is inactive. */
+            chargeCurrency: string | null;
+            settlementCurrency: string | null;
+        };
+        financialAuditBoundary: { required: boolean };
+    };
+}
+
+export interface TenantConfigurationBundleV2
+    extends Omit<TenantConfigurationBundle, "schemaVersion" | "planes"> {
+    schemaVersion: typeof TENANT_CONFIG_SCHEMA_VERSION_V2;
+    planes: {
+        BRAND: BrandPlane;
+        MARKET: MarketPlaneV2;
+        CATALOGUE: CataloguePlane;
+        COMMERCE: CommercePlaneV2;
+        OPERATIONS: OperationsPlane;
+        EXPERIENCE: ExperiencePlane;
+    };
+}
+
+export type AnyTenantConfigurationBundle =
+    | TenantConfigurationBundle
+    | TenantConfigurationBundleV2;
 
 export interface CataloguePrice {
     amount: number;

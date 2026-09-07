@@ -10,19 +10,28 @@
 //   * no CLAD-specific inferred state may enter Core configuration
 //   * legacy `appointments` may never be named as canonical authority
 //
-// CORR-01: the PRIMARY semantic control is now the closed schema in schema.ts —
-// an allowlist, so an undeclared field is rejected regardless of what it is
+// CORR-01: the PRIMARY semantic control is the closed schema in schema.ts — an
+// allowlist, so an undeclared field is rejected regardless of what it is
 // called. The prohibited-token scan below is retained only as defense-in-depth.
 // CORR-02: every load-bearing OPERATIONS authority flag is an executable
 // invariant; it must be present AND true, and the closed schema prevents an
 // alternate field or path being used to override it.
+//
+// G5-C: validation dispatches on the declared schema version. v1 bundles remain
+// interpretable — a historical transaction must stay readable against the
+// configuration that governed it — while v2 removes the duplicated Core-owned
+// values that R18 named.
 
 import {
     CONFIGURATION_PLANES,
     TENANT_CONFIG_SCHEMA_VERSION,
-    type TenantConfigurationBundle
+    TENANT_CONFIG_SCHEMA_VERSION_V2,
+    type AnyTenantConfigurationBundle,
+    type MarketPlane,
+    type MarketPlaneV2
 } from "./contract";
-import { checkAgainstSchema } from "./schema";
+import { checkAgainstSchema, schemaForVersion } from "./schema";
+import { loadMarketConfig, type MarketId } from "../marketConfig";
 
 export interface ValidationFinding {
     code: string;
@@ -42,10 +51,8 @@ const COUNTRY = /^[A-Z]{2}$/;
 const CODE = /^[A-Z][A-Z0-9_]*$/;
 
 /**
- * Field names that would introduce CLAD-specific inferred state or
- * psychological profiling into Core configuration. Presence anywhere in the
- * bundle is a hard failure — SCP records Service-Commerce truth; CLAD
- * interprets from that truth and never writes into it.
+ * Defense-in-depth only. The closed schema is the semantic control; this list
+ * exists so a field that somehow bypasses the schema still trips a second wire.
  */
 const FORBIDDEN_FIELD_TOKENS = [
     "clad",
@@ -58,25 +65,38 @@ const FORBIDDEN_FIELD_TOKENS = [
     "psychograph"
 ];
 
-/** Configuration may never name the legacy surface as canonical authority. */
 const FORBIDDEN_AUTHORITY_TOKENS = ["appointments"];
 
+const DECLARED_BOUNDARY_PATHS: ReadonlySet<string> = new Set([
+    "measurement.cladConstraints",
+    "measurement.projectionBoundaries"
+]);
+
 export function validateTenantConfiguration(
-    bundle: TenantConfigurationBundle
+    bundle: AnyTenantConfigurationBundle
 ): ValidationResult {
     const findings: ValidationFinding[] = [];
     const fail = (code: string, path: string, message: string) =>
         findings.push({ code, path, message });
 
-    // --- closed schema: undeclared fields are rejected anywhere, at any depth
-    for (const violation of checkAgainstSchema(bundle)) {
+    // --- schema selection --------------------------------------------------
+    const schema = schemaForVersion(bundle.schemaVersion);
+    if (!schema) {
+        fail(
+            "SCHEMA_VERSION_UNSUPPORTED",
+            "schemaVersion",
+            `expected ${TENANT_CONFIG_SCHEMA_VERSION} or ${TENANT_CONFIG_SCHEMA_VERSION_V2}`
+        );
+        return { valid: false, findings };
+    }
+    const isV2 = bundle.schemaVersion === TENANT_CONFIG_SCHEMA_VERSION_V2;
+
+    // --- closed schema: undeclared fields rejected anywhere, at any depth --
+    for (const violation of checkAgainstSchema(bundle, schema)) {
         fail(violation.code, violation.path, violation.message);
     }
 
-    // --- schema envelope ---------------------------------------------------
-    if (bundle.schemaVersion !== TENANT_CONFIG_SCHEMA_VERSION) {
-        fail("SCHEMA_VERSION_UNSUPPORTED", "schemaVersion", `expected ${TENANT_CONFIG_SCHEMA_VERSION}`);
-    }
+    // --- envelope ----------------------------------------------------------
     if (!Number.isInteger(bundle.configurationVersion) || bundle.configurationVersion < 1) {
         fail("CONFIGURATION_VERSION_INVALID", "configurationVersion", "must be an integer >= 1");
     }
@@ -84,7 +104,6 @@ export function validateTenantConfiguration(
         fail("ENVIRONMENT_REQUIRED", "environment", "environment is required");
     }
 
-    // --- tenant identity ---------------------------------------------------
     const tenant = bundle.tenant;
     if (!tenant || typeof tenant.id !== "string" || tenant.id.trim() === "") {
         fail("TENANT_REQUIRED", "tenant.id", "tenant id is required");
@@ -95,10 +114,10 @@ export function validateTenantConfiguration(
         }
     }
 
-    // --- all six planes present -------------------------------------------
-    const planes = bundle.planes ?? ({} as TenantConfigurationBundle["planes"]);
+    const planes = bundle.planes as Record<string, never> &
+        AnyTenantConfigurationBundle["planes"];
     for (const plane of CONFIGURATION_PLANES) {
-        if (!planes[plane] || typeof planes[plane] !== "object") {
+        if (!(planes as Record<string, unknown>)[plane]) {
             fail("PLANE_MISSING", `planes.${plane}`, `configuration plane ${plane} is required`);
         }
     }
@@ -106,29 +125,28 @@ export function validateTenantConfiguration(
         return { valid: false, findings };
     }
 
-    // --- MARKET -------------------------------------------------------------
-    const market = planes.MARKET;
-    if (!market.id || market.id !== tenant.market) {
+    // --- MARKET, and the currency that governs prices ----------------------
+    const marketAny = planes.MARKET as MarketPlane | MarketPlaneV2;
+    let governingPriceCurrency: string | undefined;
+
+    if (!marketAny.id || marketAny.id !== tenant.market) {
         fail("MARKET_INVALID", "planes.MARKET.id", "market id must match tenant.market");
     }
-    if (!COUNTRY.test(market.country ?? "")) {
-        fail("MARKET_INVALID", "planes.MARKET.country", "country must be an ISO 3166-1 alpha-2 code");
+    if (!COUNTRY.test(marketAny.country ?? "")) {
+        fail("MARKET_INVALID", "planes.MARKET.country", "country must be ISO 3166-1 alpha-2");
     }
-    if (!market.timezone || !market.timezone.includes("/")) {
-        fail("MARKET_INVALID", "planes.MARKET.timezone", "timezone must be an IANA zone");
-    }
-    if (!LOCALE.test(market.localeDefault ?? "")) {
+    if (!LOCALE.test(marketAny.localeDefault ?? "")) {
         fail("LOCALE_INVALID", "planes.MARKET.localeDefault", "default locale is malformed");
     }
-    if (!Array.isArray(market.supportedLocales) || market.supportedLocales.length === 0) {
+    if (!Array.isArray(marketAny.supportedLocales) || marketAny.supportedLocales.length === 0) {
         fail("LOCALE_INVALID", "planes.MARKET.supportedLocales", "at least one locale is required");
     } else {
-        for (const locale of market.supportedLocales) {
+        for (const locale of marketAny.supportedLocales) {
             if (!LOCALE.test(locale)) {
                 fail("LOCALE_INVALID", "planes.MARKET.supportedLocales", `malformed locale ${locale}`);
             }
         }
-        if (!market.supportedLocales.includes(market.localeDefault)) {
+        if (!marketAny.supportedLocales.includes(marketAny.localeDefault)) {
             fail(
                 "LOCALE_INVALID",
                 "planes.MARKET.localeDefault",
@@ -136,39 +154,89 @@ export function validateTenantConfiguration(
             );
         }
     }
-    for (const key of ["price", "display"] as const) {
-        if (!ISO_CURRENCY.test(market.currency?.[key] ?? "")) {
-            fail("CURRENCY_INVALID", `planes.MARKET.currency.${key}`, "must be an ISO 4217 code");
-        }
-    }
-    const hours = market.operatingHours?.daily;
-    if (!hours || !HHMM.test(hours.open ?? "") || !HHMM.test(hours.close ?? "")) {
-        fail("OPERATING_HOURS_INVALID", "planes.MARKET.operatingHours.daily", "times must be HH:MM");
-    } else if (toMinutes(hours.close) <= toMinutes(hours.open)) {
-        fail(
-            "OPERATING_HOURS_INVALID",
-            "planes.MARKET.operatingHours.daily",
-            "close must be after open"
-        );
-    }
-    if (!Array.isArray(market.coverage?.regions) || market.coverage.regions.length === 0) {
+    if (!Array.isArray(marketAny.coverage?.regions) || marketAny.coverage.regions.length === 0) {
         fail("REGIONS_REQUIRED", "planes.MARKET.coverage.regions", "at least one region is required");
     }
 
-    // --- CATALOGUE ----------------------------------------------------------
+    if (isV2) {
+        const market = marketAny as MarketPlaneV2;
+        // The canonical SCP market plane owns timezone, currency and hours.
+        let canonical: ReturnType<typeof loadMarketConfig> | null = null;
+        try {
+            canonical = loadMarketConfig(market.marketConfigurationRef as MarketId);
+        } catch {
+            canonical = null;
+        }
+        if (!canonical) {
+            fail(
+                "MARKET_REFERENCE_UNRESOLVED",
+                "planes.MARKET.marketConfigurationRef",
+                `no canonical SCP market configuration named "${market.marketConfigurationRef}"`
+            );
+        } else {
+            if (canonical.marketId !== market.id) {
+                fail(
+                    "MARKET_REFERENCE_UNRESOLVED",
+                    "planes.MARKET.marketConfigurationRef",
+                    "the referenced canonical market must be this market"
+                );
+            }
+            governingPriceCurrency = canonical.currency.code;
+        }
+        const override = market.approvedOverrides?.operatingHours;
+        if (override !== null && override !== undefined) {
+            const daily = override.daily;
+            if (!daily || !HHMM.test(daily.open ?? "") || !HHMM.test(daily.close ?? "")) {
+                fail(
+                    "OPERATING_HOURS_INVALID",
+                    "planes.MARKET.approvedOverrides.operatingHours.daily",
+                    "override times must be HH:MM"
+                );
+            } else if (toMinutes(daily.close) <= toMinutes(daily.open)) {
+                fail(
+                    "OPERATING_HOURS_INVALID",
+                    "planes.MARKET.approvedOverrides.operatingHours.daily",
+                    "close must be after open"
+                );
+            }
+        }
+    } else {
+        const market = marketAny as MarketPlane;
+        if (!market.timezone || !market.timezone.includes("/")) {
+            fail("MARKET_INVALID", "planes.MARKET.timezone", "timezone must be an IANA zone");
+        }
+        for (const key of ["price", "display"] as const) {
+            if (!ISO_CURRENCY.test(market.currency?.[key] ?? "")) {
+                fail("CURRENCY_INVALID", `planes.MARKET.currency.${key}`, "must be ISO 4217");
+            }
+        }
+        governingPriceCurrency = market.currency?.price;
+        const hours = market.operatingHours?.daily;
+        if (!hours || !HHMM.test(hours.open ?? "") || !HHMM.test(hours.close ?? "")) {
+            fail("OPERATING_HOURS_INVALID", "planes.MARKET.operatingHours.daily", "times must be HH:MM");
+        } else if (toMinutes(hours.close) <= toMinutes(hours.open)) {
+            fail(
+                "OPERATING_HOURS_INVALID",
+                "planes.MARKET.operatingHours.daily",
+                "close must be after open"
+            );
+        }
+    }
+
+    // --- CATALOGUE ---------------------------------------------------------
     const catalogue = planes.CATALOGUE;
     validateCodedItems(
         catalogue.services ?? [],
         "planes.CATALOGUE.services",
         "SERVICE",
-        market.currency?.price,
+        governingPriceCurrency,
         fail
     );
     validateCodedItems(
         catalogue.extras ?? [],
         "planes.CATALOGUE.extras",
         "EXTRA",
-        market.currency?.price,
+        governingPriceCurrency,
         fail
     );
     for (const [index, service] of (catalogue.services ?? []).entries()) {
@@ -190,15 +258,22 @@ export function validateTenantConfiguration(
         }
     }
 
-    // --- COMMERCE -----------------------------------------------------------
-    const commerce = planes.COMMERCE;
+    // --- COMMERCE ----------------------------------------------------------
+    const commerce = planes.COMMERCE as {
+        locationDynamicPricing: { prepared: boolean; active: boolean; rules: unknown[] };
+        payment: {
+            capability: string;
+            active: boolean;
+            policy: string;
+            processorAdapter: { configured: boolean; contractReserved: boolean };
+            platformFeePolicy: { shapeReserved: boolean; active: boolean };
+            currencies: Record<string, string | null | undefined>;
+            financialAuditBoundary: { required: boolean };
+        };
+    };
     const payment = commerce.payment;
     if (payment.active && payment.policy === "OFFLINE") {
-        fail(
-            "PAYMENT_POLICY_INCOHERENT",
-            "planes.COMMERCE.payment",
-            "an OFFLINE policy cannot be active"
-        );
+        fail("PAYMENT_POLICY_INCOHERENT", "planes.COMMERCE.payment", "an OFFLINE policy cannot be active");
     }
     if (payment.active && !payment.processorAdapter.configured) {
         fail(
@@ -223,7 +298,7 @@ export function validateTenantConfiguration(
     }
     if (!payment.active) {
         for (const key of ["chargeCurrency", "settlementCurrency"] as const) {
-            if (payment.currencies[key] !== null) {
+            if (payment.currencies[key] !== null && payment.currencies[key] !== undefined) {
                 fail(
                     "INACTIVE_PAYMENT_NOT_INERT",
                     `planes.COMMERCE.payment.currencies.${key}`,
@@ -232,17 +307,21 @@ export function validateTenantConfiguration(
             }
         }
     }
-    for (const key of ["priceCurrency", "displayCurrency"] as const) {
-        if (!ISO_CURRENCY.test(payment.currencies[key] ?? "")) {
-            fail("CURRENCY_INVALID", `planes.COMMERCE.payment.currencies.${key}`, "must be ISO 4217");
+    if (!isV2) {
+        // v1 restated price/display currency here; v2 derives them, so there is
+        // nothing left to disagree with.
+        for (const key of ["priceCurrency", "displayCurrency"] as const) {
+            if (!ISO_CURRENCY.test(payment.currencies[key] ?? "")) {
+                fail("CURRENCY_INVALID", `planes.COMMERCE.payment.currencies.${key}`, "must be ISO 4217");
+            }
         }
-    }
-    if (payment.currencies.priceCurrency !== market.currency?.price) {
-        fail(
-            "CURRENCY_INVALID",
-            "planes.COMMERCE.payment.currencies.priceCurrency",
-            "price currency must agree with the market plane"
-        );
+        if (payment.currencies["priceCurrency"] !== governingPriceCurrency) {
+            fail(
+                "CURRENCY_INVALID",
+                "planes.COMMERCE.payment.currencies.priceCurrency",
+                "price currency must agree with the market plane"
+            );
+        }
     }
     if (!payment.financialAuditBoundary.required) {
         fail(
@@ -311,11 +390,7 @@ export function validateTenantConfiguration(
     ];
     for (const invariant of REQUIRED_AUTHORITY_INVARIANTS) {
         if (invariant.value !== true) {
-            fail(
-                "CANONICAL_AUTHORITY_CONTRADICTION",
-                invariant.path,
-                `must be true — ${invariant.why}`
-            );
+            fail("CANONICAL_AUTHORITY_CONTRADICTION", invariant.path, `must be true — ${invariant.why}`);
         }
     }
 
@@ -393,7 +468,6 @@ export function validateTenantConfiguration(
         }
     }
 
-    // --- forbidden content anywhere in the bundle ---------------------------
     scanForbidden(bundle, "", fail);
 
     return { valid: findings.length === 0, findings };
@@ -408,7 +482,7 @@ function validateCodedItems(
     items: Array<{ code: string; name: string; price: { amount: number; currency: string } }>,
     path: string,
     kind: "SERVICE" | "EXTRA",
-    marketPriceCurrency: string | undefined,
+    governingPriceCurrency: string | undefined,
     fail: (code: string, path: string, message: string) => void
 ): void {
     if (!Array.isArray(items) || items.length === 0) {
@@ -433,28 +507,17 @@ function validateCodedItems(
         }
         if (!ISO_CURRENCY.test(item.price?.currency ?? "")) {
             fail("PRICE_INVALID", `${at}.price.currency`, "price must be currency-bound (ISO 4217)");
-        } else if (marketPriceCurrency && item.price.currency !== marketPriceCurrency) {
+        } else if (governingPriceCurrency && item.price.currency !== governingPriceCurrency) {
             fail(
                 "PRICE_CURRENCY_MISMATCH",
                 `${at}.price.currency`,
-                `must match the market price currency ${marketPriceCurrency}`
+                `must match the governing price currency ${governingPriceCurrency}`
             );
         }
     }
 }
 
-/**
- * The two blocks where CLAD may legitimately be named: they exist to DECLARE
- * the boundary and switch CLAD off. Their contents are validated explicitly by
- * the measurement rules above, so the blunt token scan skips them rather than
- * flagging a constraint for containing the name of the thing it constrains.
- */
-const DECLARED_BOUNDARY_PATHS: ReadonlySet<string> = new Set([
-    "measurement.cladConstraints",
-    "measurement.projectionBoundaries"
-]);
-
-/** Walks every key and string value looking for prohibited content. */
+/** Defense-in-depth scan. The closed schema is the primary control. */
 function scanForbidden(
     node: unknown,
     path: string,
@@ -469,7 +532,6 @@ function scanForbidden(
     if (typeof node === "string") {
         const lowered = node.toLowerCase();
         for (const token of FORBIDDEN_AUTHORITY_TOKENS) {
-            // Only a claim of canonical authority is forbidden, not the word.
             if (lowered.includes(token) && /authorit|canonical|source of truth/.test(lowered)) {
                 fail(
                     "LEGACY_AUTHORITY_REFERENCE",

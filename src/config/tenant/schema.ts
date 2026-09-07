@@ -16,7 +16,7 @@
 // which is the governance property we want, not an obstacle.
 
 export type SchemaNode =
-    | { kind: "object"; fields: Record<string, SchemaNode>; optional?: boolean }
+    | { kind: "object"; fields: Record<string, SchemaNode>; optional?: boolean; nullable?: boolean }
     /** Open key set, constrained value type. For declared vocabularies only. */
     | { kind: "map"; value: SchemaNode; optional?: boolean }
     | { kind: "array"; item: SchemaNode; optional?: boolean }
@@ -235,6 +235,102 @@ export const TENANT_CONFIGURATION_SCHEMA: SchemaNode = obj({
     })
 });
 
+/**
+ * G5-C schema v2. Identical to v1 except that the tenant MARKET plane no longer
+ * declares timezone, currency or operating hours — the canonical SCP market
+ * plane owns those — and the COMMERCE payment block no longer restates
+ * price/display currency. A duplicate authoritative value is therefore
+ * unrepresentable rather than merely rejected.
+ */
+export const TENANT_CONFIGURATION_SCHEMA_V2: SchemaNode = (() => {
+    const v1 = TENANT_CONFIGURATION_SCHEMA as Extract<SchemaNode, { kind: "object" }>;
+    const planesV1 = v1.fields["planes"] as Extract<SchemaNode, { kind: "object" }>;
+    const commerceV1 = planesV1.fields["COMMERCE"] as Extract<SchemaNode, { kind: "object" }>;
+    const paymentV1 = commerceV1.fields["payment"] as Extract<SchemaNode, { kind: "object" }>;
+
+    return {
+        kind: "object",
+        fields: {
+            ...v1.fields,
+            planes: {
+                kind: "object",
+                fields: {
+                    ...planesV1.fields,
+                    MARKET: {
+                        kind: "object",
+                        fields: {
+                            id: { kind: "string" },
+                            country: { kind: "string" },
+                            localeDefault: { kind: "string" },
+                            supportedLocales: { kind: "array", item: { kind: "string" } },
+                            marketConfigurationRef: { kind: "string" },
+                            approvedOverrides: {
+                                kind: "object",
+                                fields: {
+                                    operatingHours: {
+                                        kind: "object",
+                                        nullable: true,
+                                        fields: {
+                                            daily: {
+                                                kind: "object",
+                                                fields: {
+                                                    open: { kind: "string" },
+                                                    close: { kind: "string" }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            },
+                            coverage: {
+                                kind: "object",
+                                fields: {
+                                    regions: { kind: "array", item: { kind: "string" } },
+                                    customerContext: {
+                                        kind: "object",
+                                        fields: {
+                                            accommodationTypes: {
+                                                kind: "array",
+                                                item: { kind: "string" }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    COMMERCE: {
+                        kind: "object",
+                        fields: {
+                            ...commerceV1.fields,
+                            payment: {
+                                kind: "object",
+                                fields: {
+                                    ...paymentV1.fields,
+                                    currencies: {
+                                        kind: "object",
+                                        fields: {
+                                            chargeCurrency: { kind: "string", nullable: true },
+                                            settlementCurrency: { kind: "string", nullable: true }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    };
+})();
+
+/** Selects the closed schema for a declared bundle schema version. */
+export function schemaForVersion(schemaVersion: unknown): SchemaNode | null {
+    if (schemaVersion === "scp.tenant.configuration.v1") return TENANT_CONFIGURATION_SCHEMA;
+    if (schemaVersion === "scp.tenant.configuration.v2") return TENANT_CONFIGURATION_SCHEMA_V2;
+    return null;
+}
+
 export interface SchemaViolation {
     code: "UNDECLARED_FIELD" | "MISSING_REQUIRED_FIELD" | "FIELD_TYPE_INVALID" | "VALUE_NOT_PERMITTED";
     path: string;
@@ -256,6 +352,9 @@ function walk(value: unknown, schema: SchemaNode, path: string, out: SchemaViola
 
     switch (schema.kind) {
         case "object": {
+            if (value === null && schema.nullable) {
+                return;
+            }
             if (typeof value !== "object" || value === null || Array.isArray(value)) {
                 out.push({ code: "FIELD_TYPE_INVALID", path: at, message: "expected an object" });
                 return;
