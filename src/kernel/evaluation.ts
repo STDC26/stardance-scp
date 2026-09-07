@@ -390,6 +390,9 @@ async function composeDecision(
     // 5 — LOCATION / SERVICE AREA
     let locationId: string | null = null;
     let locationTimezone: string | null = null;
+    // Where the request must be served. Carried forward into capacity
+    // evaluation so that "when" and "where" are answered by the SAME window.
+    let capacityScope: CapacityScope | null = null;
     if (request.topology === "INSTORE") {
         if (!request.locationId) {
             return {
@@ -427,6 +430,7 @@ async function composeDecision(
         }
         locationId = request.locationId;
         locationTimezone = location.timezone;
+        capacityScope = { kind: "INSTORE", locationId: request.locationId };
     } else {
         if (!request.serviceAreaKey) {
             return {
@@ -434,12 +438,13 @@ async function composeDecision(
                 refusal: refuse("LOCATION_NOT_SERVICEABLE", "MOBILE requires a serviceAreaKey")
             };
         }
-        const areaRows = await client.query<{ service_area_id: string }>(
-            `SELECT service_area_id FROM core_service_area
+        const areaRows = await client.query<{ service_area_id: string; area_key: string }>(
+            `SELECT service_area_id, area_key FROM core_service_area
               WHERE tenant_id = $1 AND market_id = $2 AND area_key = $3 AND active = TRUE`,
             [tenantId, request.marketId, request.serviceAreaKey]
         );
-        if (areaRows.rows.length === 0) {
+        const area = areaRows.rows[0];
+        if (!area) {
             return {
                 kind: "REFUSED",
                 refusal: refuse(
@@ -448,6 +453,16 @@ async function composeDecision(
                 )
             };
         }
+        // The area the rest of this decision uses is the one READ BACK from the
+        // governed row, not the string the client sent. It therefore provably
+        // belongs to this tenant and this market before it reaches capacity
+        // evaluation, and a foreign-tenant key cannot arrive there at all
+        // because it does not survive the lookup above.
+        capacityScope = {
+            kind: "MOBILE",
+            serviceAreaId: area.service_area_id,
+            areaKey: area.area_key
+        };
     }
 
     // 6 — BOOKABLE WINDOW
@@ -538,7 +553,17 @@ async function composeDecision(
     let sawAvailability = false;
     let sawResources = false;
     for (const providerId of candidates) {
-        const available = await providerIsAvailable(client, providerId, startTime, endTime);
+        // One predicate, one loop, one invariant. The preferred-provider path is
+        // a FILTER over `eligible` rather than a separate branch, so pinning a
+        // provider narrows who is considered and never relaxes what they must
+        // satisfy.
+        const available = await providerIsAvailable(
+            client,
+            providerId,
+            startTime,
+            endTime,
+            capacityScope
+        );
         if (!available) {
             continue;
         }
@@ -673,19 +698,57 @@ async function eligibleProviders(
     return rows.map((r) => r.provider_id);
 }
 
+/**
+ * Where a request must be served, resolved from governed data in step 5.
+ *
+ * MOBILE carries the canonical service-area identity and the governed area key
+ * that provider capacity windows are recorded against. INSTORE carries the
+ * canonical location id.
+ */
+type CapacityScope =
+    | { kind: "MOBILE"; serviceAreaId: string; areaKey: string }
+    | { kind: "INSTORE"; locationId: string };
+
+/**
+ * Does this provider have current, active capacity covering BOTH the requested
+ * interval AND the requested place?
+ *
+ * The conjunction is the whole point. Before this was corrected, "when" and
+ * "where" were answered independently: a request for area B was satisfied by a
+ * provider whose only overlapping window was for area A, because the requested
+ * area was validated as *existing* in the tenant rather than as *covered by the
+ * window that supplied the time*. A provider working area A on one day and area
+ * B on the next was therefore sellable in both areas on both days.
+ *
+ * Both conditions now have to be satisfied by the SAME row.
+ *
+ * INSTORE is deliberately left as it was. The existing INSTORE path already
+ * constrains eligibility through the `core_provider_location` join in
+ * `eligibleProviders`, no writer produces location-specific INSTORE windows
+ * today, and widening the predicate there would change INSTORE outcomes — which
+ * is a separate question from the defect being repaired here.
+ */
 async function providerIsAvailable(
     client: PoolClient,
     providerId: string,
     start: Date,
-    end: Date
+    end: Date,
+    scope: CapacityScope | null
 ): Promise<boolean> {
+    const params: unknown[] = [providerId, start, end];
+    let placeFilter = "";
+    if (scope?.kind === "MOBILE") {
+        placeFilter = "AND location_id = $4";
+        params.push(scope.areaKey);
+    }
     const { rows } = await client.query<{ ok: boolean }>(
         `SELECT EXISTS (
             SELECT 1 FROM core_capacity_window
              WHERE provider_id = $1 AND active = TRUE
                AND during @> tstzrange($2, $3, '[)')
+               ${placeFilter}
          ) AS ok`,
-        [providerId, start, end]
+        params
     );
     return rows[0]?.ok === true;
 }

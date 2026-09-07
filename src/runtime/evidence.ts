@@ -25,7 +25,23 @@ export type RuntimeEvidenceKind =
     | "DEMAND_INGRESS_ACCEPTED"
     | "DEMAND_INGRESS_REPLAYED"
     | "DEMAND_INGRESS_REFUSED"
-    | "CHANNEL_HANDOFF_ATTEMPTED";
+    | "CHANNEL_HANDOFF_ATTEMPTED"
+    // G5-E (additive, mirrors migration 012): what the provider ingress boundary
+    // and the supply projection did. Still evidence, still not business truth.
+    | "PROVIDER_SESSION_ISSUED"
+    | "PROVIDER_SESSION_REFUSED"
+    | "PROVIDER_INGRESS_ACCEPTED"
+    | "PROVIDER_INGRESS_REPLAYED"
+    | "PROVIDER_INGRESS_REFUSED"
+    | "PROVIDER_CARD_SUBMITTED"
+    | "PROVIDER_CARD_APPROVED"
+    | "PROVIDER_CARD_REJECTED"
+    | "AVAILABILITY_SUBMITTED"
+    | "AVAILABILITY_CONFIRMED"
+    | "AVAILABILITY_INVALIDATED"
+    | "SERVICE_AREA_PROJECTED"
+    | "APPROVED_SUPPLY_PROJECTED"
+    | "PROVIDER_MEDIA_STORED";
 
 export interface RuntimeEvidenceInput {
     kind: RuntimeEvidenceKind;

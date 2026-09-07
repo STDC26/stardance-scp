@@ -57,6 +57,14 @@ export interface EffectiveConfiguration {
         activatedAt: Date | null;
         sourceReference: string;
         canonicalMarketId: string;
+        /**
+         * G5-E (additive): the tenant id the CANONICAL MARKET declares, which is
+         * the scope G3 reads for locations, service areas and resources. It is
+         * deliberately not the same value as `identity.tenantId` — that is the
+         * tenant CONFIGURATION id — and conflating the two would silently scope
+         * supply to the wrong tenant.
+         */
+        canonicalTenantId: string;
     };
     /** Core-owned, possibly overridden. Each carries its origin. */
     timezone: ResolvedValue<string>;
@@ -216,7 +224,8 @@ export function resolveFromStored(
                 checksum: stored.checksum,
                 activatedAt: stored.activatedAt,
                 sourceReference: stored.sourceReference,
-                canonicalMarketId: canonical.marketId
+                canonicalMarketId: canonical.marketId,
+                canonicalTenantId: canonical.tenantId
             },
             timezone: { value: canonical.timezone, origin: "CANONICAL_MARKET" },
             priceCurrency: { value: canonical.currency.code, origin: "CANONICAL_MARKET" },

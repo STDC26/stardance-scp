@@ -17,7 +17,8 @@
       "vi": "draft-needs-native-review",
       "tl": "draft-needs-native-review"
     },
-    "g5dNote": "SCP-G5-D-01 added the `acknowledgement` and `customer` sections for the Freshline customer surface. English is authored; Indonesian carries the same DRAFT_TRANSLATION status as the rest of this file and must be reviewed by a fluent speaker before any production customer traffic. Thai, Vietnamese and Tagalog are deliberately absent from the new sections: the governed Bali configuration supports en and id only, and inventing unreviewed translations for unsupported locales would be worse than their absence."
+    "g5dNote": "SCP-G5-D-01 added the `acknowledgement` and `customer` sections for the Freshline customer surface. English is authored; Indonesian carries the same DRAFT_TRANSLATION status as the rest of this file and must be reviewed by a fluent speaker before any production customer traffic. Thai, Vietnamese and Tagalog are deliberately absent from the new sections: the governed Bali configuration supports en and id only, and inventing unreviewed translations for unsupported locales would be worse than their absence.",
+    "g5eNote": "SCP-G5-E-01 added the `partner` section for the Freshline Partner portal. English is authored; Indonesian carries the same DRAFT_TRANSLATION status as the rest of this file and must be reviewed by a fluent speaker before any production partner traffic (R24). Thai, Vietnamese and Tagalog are deliberately absent: the governed Bali configuration supports en and id only."
   },
   "intake": {
     "step1_serviceSelection": {
@@ -238,6 +239,176 @@
     "error_heading": {
       "en": "We couldn't send that yet",
       "id": "Kami belum dapat mengirimnya"
+    },
+    "error_generic": {
+      "en": "Something went wrong on our side. Your details are still here — please try again.",
+      "id": "Terjadi kesalahan di pihak kami. Detail Anda masih tersimpan — silakan coba lagi."
+    }
+  },
+  "partner": {
+    "portal_title": {
+      "en": "Partner Portal",
+      "id": "Portal Mitra"
+    },
+    "heading_about": {
+      "en": "About you",
+      "id": "Tentang Anda"
+    },
+    "heading_work": {
+      "en": "How you work",
+      "id": "Cara Anda bekerja"
+    },
+    "heading_card": {
+      "en": "Your Partner Card",
+      "id": "Kartu Mitra Anda"
+    },
+    "heading_week": {
+      "en": "Your week",
+      "id": "Minggu Anda"
+    },
+    "label_legal_name": {
+      "en": "Legal name",
+      "id": "Nama sesuai identitas"
+    },
+    "label_display_name": {
+      "en": "Preferred name",
+      "id": "Nama panggilan"
+    },
+    "label_contact": {
+      "en": "WhatsApp number",
+      "id": "Nomor WhatsApp"
+    },
+    "label_role": {
+      "en": "Your craft",
+      "id": "Keahlian Anda"
+    },
+    "label_services": {
+      "en": "What you can deliver",
+      "id": "Layanan yang dapat Anda berikan"
+    },
+    "label_how_you_work": {
+      "en": "How you work",
+      "id": "Cara Anda bekerja"
+    },
+    "label_about_me": {
+      "en": "About me",
+      "id": "Tentang saya"
+    },
+    "label_chips": {
+      "en": "What describes you",
+      "id": "Yang menggambarkan Anda"
+    },
+    "label_portrait": {
+      "en": "Portrait",
+      "id": "Foto diri"
+    },
+    "label_week_start": {
+      "en": "Week starting Monday",
+      "id": "Minggu mulai Senin"
+    },
+    "label_from": {
+      "en": "From",
+      "id": "Dari"
+    },
+    "label_to": {
+      "en": "To",
+      "id": "Sampai"
+    },
+    "label_areas": {
+      "en": "Areas you cover",
+      "id": "Area yang Anda layani"
+    },
+    "label_available": {
+      "en": "Available this day",
+      "id": "Tersedia hari ini"
+    },
+    "apply_to_all": {
+      "en": "Apply Monday to every day",
+      "id": "Terapkan Senin ke semua hari"
+    },
+    "submit_profile": {
+      "en": "Save my profile",
+      "id": "Simpan profil saya"
+    },
+    "submit_card": {
+      "en": "Submit for review",
+      "id": "Kirim untuk ditinjau"
+    },
+    "submit_week": {
+      "en": "Submit my week",
+      "id": "Kirim minggu saya"
+    },
+    "language": {
+      "en": "Language",
+      "id": "Bahasa"
+    },
+    "day_1": {
+      "en": "Monday",
+      "id": "Senin"
+    },
+    "day_2": {
+      "en": "Tuesday",
+      "id": "Selasa"
+    },
+    "day_3": {
+      "en": "Wednesday",
+      "id": "Rabu"
+    },
+    "day_4": {
+      "en": "Thursday",
+      "id": "Kamis"
+    },
+    "day_5": {
+      "en": "Friday",
+      "id": "Jumat"
+    },
+    "day_6": {
+      "en": "Saturday",
+      "id": "Sabtu"
+    },
+    "day_7": {
+      "en": "Sunday",
+      "id": "Minggu"
+    },
+    "stage_profile_not_submitted": {
+      "en": "Start by telling us about yourself.",
+      "id": "Mulailah dengan menceritakan tentang diri Anda."
+    },
+    "stage_profile_submitted": {
+      "en": "Profile saved. Submit it for review when you are ready.",
+      "id": "Profil tersimpan. Kirim untuk ditinjau jika Anda sudah siap."
+    },
+    "stage_owner_review": {
+      "en": "With the Freshline team for review. Nothing is active yet.",
+      "id": "Sedang ditinjau tim Freshline. Belum ada yang aktif."
+    },
+    "stage_awaiting_schedule": {
+      "en": "Your card is approved. Your week still needs the team's confirmation.",
+      "id": "Kartu Anda disetujui. Minggu Anda masih menunggu konfirmasi tim."
+    },
+    "stage_approved_supply": {
+      "en": "Your card and this week are both confirmed.",
+      "id": "Kartu Anda dan minggu ini keduanya sudah dikonfirmasi."
+    },
+    "notice_not_approved": {
+      "en": "Saving a profile is not approval. The Freshline team reviews every partner.",
+      "id": "Menyimpan profil bukan berarti disetujui. Tim Freshline meninjau setiap mitra."
+    },
+    "notice_not_confirmed": {
+      "en": "Sending your week is not confirmation. The team confirms schedules separately.",
+      "id": "Mengirim minggu Anda bukan konfirmasi. Tim mengonfirmasi jadwal secara terpisah."
+    },
+    "notice_no_assignment": {
+      "en": "Setting your availability never books a customer for you. Assignment is a separate step the team owns.",
+      "id": "Mengatur ketersediaan tidak pernah memesan pelanggan untuk Anda. Penugasan adalah langkah terpisah milik tim."
+    },
+    "notice_id_assigned": {
+      "en": "Your Partner ID is issued by the Freshline team when your card is approved.",
+      "id": "ID Mitra Anda diterbitkan oleh tim Freshline saat kartu Anda disetujui."
+    },
+    "error_heading": {
+      "en": "We couldn't save that yet",
+      "id": "Kami belum dapat menyimpannya"
     },
     "error_generic": {
       "en": "Something went wrong on our side. Your details are still here — please try again.",
