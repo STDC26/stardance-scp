@@ -131,12 +131,15 @@ d("G5-E / availability — submission, confirmation and the space between them",
 
     it("normalizes the week server-side and stores a Monday", async () => {
         const submitted = await submit(week());
-        const { rows } = await pool.query<{ week_start_date: Date; content_digest: string }>(
+        const { rows } = await pool.query<{ week_start_date: string; content_digest: string }>(
             `SELECT week_start_date, content_digest FROM core_provider_availability_version
               WHERE availability_version_id = $1`,
             [submitted.body["availabilityVersionId"]]
         );
-        const stored = DateTime.fromJSDate(rows[0]!.week_start_date, { zone: "utc" });
+        // SCP-R42: a DATE arrives as the calendar date Postgres stored, not as
+        // an instant, so reading its weekday cannot depend on the host timezone.
+        expect(rows[0]!.week_start_date).toBe(weekStartDate);
+        const stored = DateTime.fromISO(rows[0]!.week_start_date, { zone: "utc" });
         expect(stored.weekday).toBe(1);
         expect(rows[0]!.content_digest).toMatch(/^[0-9a-f]{64}$/);
     });

@@ -4,7 +4,27 @@
 // backoff and jitter. All three services route writes through this helper
 // so retry semantics are enforced in exactly one place.
 
-import { Pool, type PoolClient, type PoolConfig } from "pg";
+import { Pool, types, type PoolClient, type PoolConfig } from "pg";
+
+/**
+ * SCP-R42 — a calendar date is not an instant.
+ *
+ * `node-pg` materialises a PostgreSQL DATE as a JavaScript Date at *host-local*
+ * midnight. Read back on a host with a positive UTC offset, the stored date
+ * `2026-09-28` arrives as `2026-09-27T16:00:00Z`; anything that then reads a
+ * calendar date off that instant sees the day before. That shifted the Provider
+ * week start, which materialised capacity windows on the wrong service day and
+ * made MOBILE eligibility answer for the wrong day.
+ *
+ * A DATE carries no timezone and no time of day, so there is no instant to
+ * materialise. It is normalised here — at the one boundary every database
+ * connection in this codebase passes through — to the timezone-neutral
+ * `YYYY-MM-DD` text Postgres actually sent. The point of doing it here rather
+ * than at each read site is that a string cannot be silently re-interpreted by
+ * a later conversion, so a new DATE read cannot reintroduce the defect.
+ */
+const PG_OID_DATE = 1082;
+types.setTypeParser(PG_OID_DATE, (value: string) => value);
 
 export function createPool(overrides: PoolConfig = {}): Pool {
     return new Pool({

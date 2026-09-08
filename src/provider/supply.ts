@@ -57,7 +57,8 @@ export async function loadAvailabilityVersion(
         tenant_id: string;
         market_id: string;
         environment: string;
-        week_start_date: Date;
+        /** SCP-R42: a calendar date, normalised to YYYY-MM-DD at the pool boundary. */
+        week_start_date: string;
         version: number;
         state: AvailabilityVersionRow["state"];
         content_digest: string;
@@ -94,9 +95,7 @@ export async function loadAvailabilityVersion(
         tenantId: row.tenant_id,
         marketId: row.market_id,
         environment: row.environment,
-        weekStartDate: DateTime.fromJSDate(row.week_start_date, { zone: "utc" }).toFormat(
-            "yyyy-MM-dd"
-        ),
+        weekStartDate: row.week_start_date,
         version: row.version,
         state: row.state,
         contentDigest: row.content_digest,
@@ -276,7 +275,8 @@ export async function approvedSupply(
         service_codes: string[];
         availability_version_id: string;
         version: number;
-        week_start_date: Date;
+        /** SCP-R42: a calendar date, normalised to YYYY-MM-DD at the pool boundary. */
+        week_start_date: string;
     }>(
         `SELECT p.provider_id,
                 pid.public_id,
@@ -340,9 +340,7 @@ export async function approvedSupply(
             roleCode: row.role_code,
             serviceIds: services.rows.map((s) => s.service_id),
             serviceCodes: row.service_codes,
-            weekStartDate: DateTime.fromJSDate(row.week_start_date, { zone: "utc" }).toFormat(
-                "yyyy-MM-dd"
-            ),
+            weekStartDate: row.week_start_date,
             availabilityVersionId: row.availability_version_id,
             availabilityVersion: row.version,
             days: days.rows.map((d) => ({

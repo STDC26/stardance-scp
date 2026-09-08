@@ -727,7 +727,8 @@ async function providerState(
         );
         const availability = await client.query<{
             availability_version_id: string;
-            week_start_date: Date;
+            /** SCP-R42: a calendar date, normalised to YYYY-MM-DD at the pool boundary. */
+            week_start_date: string;
             version: number;
             state: string;
         }>(
@@ -780,7 +781,7 @@ async function providerState(
                 : null,
             availability: availability.rows.map((a) => ({
                 availabilityVersionId: a.availability_version_id,
-                weekStartDate: a.week_start_date.toISOString().slice(0, 10),
+                weekStartDate: a.week_start_date,
                 version: a.version,
                 state: a.state
             })),
