@@ -121,11 +121,18 @@ describe("G4 — taxonomies are complete", () => {
             expect(LIFECYCLE_REASONS).toContain(code);
             expect(isLifecycleReason(code)).toBe(true);
         }
-        expect(LIFECYCLE_REASONS).toHaveLength(29);
+        // Still an exact closed set — one wider than G4 established, by the
+        // single reason SCP-G5-F-CORR-01 authorized for the R39 invariant.
+        expect(LIFECYCLE_REASONS).toContain("QUALIFICATION_REQUIRED");
+        expect(LIFECYCLE_REASONS).toHaveLength(30);
     });
 
     it("carries the full canonical action taxonomy", () => {
         const required = [
+            // G5-F (additive): the Owner's serviceability judgement. It records
+            // a decision and performs no transition, which is why it sits in
+            // the action taxonomy and not in the state graph.
+            "QUALIFY_REQUEST",
             "DISPATCH_PROVIDER",
             "EXPIRE_DISPATCH",
             "RECORD_PROVIDER_ACCEPTANCE",
@@ -146,7 +153,9 @@ describe("G4 — taxonomies are complete", () => {
             expect(OPERATIONAL_ACTION_TYPES).toContain(action);
             expect(isOperationalActionType(action)).toBe(true);
         }
-        expect(OPERATIONAL_ACTION_TYPES).toHaveLength(15);
+        // Still an exact closed set — one wider than G4 established, by the
+        // single action SCP-G5-F-01 authorized.
+        expect(OPERATIONAL_ACTION_TYPES).toHaveLength(16);
     });
 
     it("rejects anything outside the taxonomies", () => {

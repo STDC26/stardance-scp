@@ -24,6 +24,7 @@ import {
 import { requireUuids } from "../identifiers";
 import { recordEvent } from "../events/eventLog";
 import { loadProvider, isDispatchable } from "../provider/provider";
+import { dispatchQualificationBlock } from "../request/qualification";
 import { authorizeProviderResponse } from "../identity/authority";
 import { transitionRequest, loadRequest } from "../request/serviceRequest";
 import { loadMarketConfig, type MarketId } from "../../config/marketConfig";
@@ -114,6 +115,17 @@ export async function offerDispatch(
             "PROVIDER_NOT_APPROVED",
             `provider ${input.providerId} supply status is ${provider.supplyStatus}, not APPROVED`
         );
+    }
+
+    // SCP-G5-F-CORR-01 (R39). This function can create canonical dispatch truth
+    // on its own — it inserts the offer AND transitions the request — so it is
+    // an authoritative ingress in its own right and must satisfy the same
+    // qualification precondition as the orchestrator. Both call the one shared
+    // determination in src/core/request/qualification.ts; neither owns a copy
+    // of the rule.
+    const unqualified = await dispatchQualificationBlock(client, input.requestId);
+    if (unqualified) {
+        return fail("QUALIFICATION_REQUIRED", unqualified.message);
     }
 
     const now = (input.now ?? (() => new Date()))();

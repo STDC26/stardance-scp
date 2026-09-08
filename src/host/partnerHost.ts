@@ -168,7 +168,11 @@ export async function issueOwnerSession(
             lineage
         });
         await recordRuntimeEvidence(client, {
-            kind: "PROVIDER_SESSION_ISSUED",
+            // Owner authority gets its own evidence kind. Minting it is a
+            // materially different act from enrolling a partner, and an audit
+            // that had to read `detail.role` to tell them apart would be one
+            // careless query away from conflating them.
+            kind: "OWNER_SESSION_ISSUED",
             lineage,
             outcome: "OK",
             configurationVersion: runtime.configuration.provenance.configurationVersion,

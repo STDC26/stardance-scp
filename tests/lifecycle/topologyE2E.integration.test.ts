@@ -115,6 +115,10 @@ d("G4-E11 — Freshline Bali Mobile operational reproof", () => {
             // Every action, accepted and refused, in order.
             const actions = await actionsForRequest(client, w.requestId);
             expect(actions.map((a) => a.actionType)).toEqual([
+                // SCP-G5-F-CORR-01 (R39): the owner's serviceability judgement
+                // is now part of the durable record, and precedes dispatch
+                // because it is a precondition of it.
+                "QUALIFY_REQUEST",
                 "DISPATCH_PROVIDER",
                 "RECORD_PROVIDER_ACCEPTANCE",
                 "ASSIGN_PROVIDER",
@@ -125,7 +129,9 @@ d("G4-E11 — Freshline Bali Mobile operational reproof", () => {
             ]);
             expect(actions.every((a) => a.outcome === "ACCEPTED")).toBe(true);
             // Replaying the recorded to-states reproduces the canonical path.
-            expect(actions.map((a) => a.toState)).toEqual(SUCCESSFUL_PATH);
+            // The judgement records a decision and moves nothing, so its
+            // toState is null and the canonical path is unchanged beneath it.
+            expect(actions.map((a) => a.toState)).toEqual([null, ...SUCCESSFUL_PATH]);
 
             // The supporting evidence objects are all present and versioned.
             expect(await attemptsForRequest(client, w.requestId)).toHaveLength(1);

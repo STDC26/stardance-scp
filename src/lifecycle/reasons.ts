@@ -12,6 +12,10 @@ export const LIFECYCLE_REASONS = [
     "DISPATCH_SUPERSEDED",
     "STALE_DISPATCH_RESPONSE",
     "AMBIGUOUS_DISPATCH_RESPONSE",
+    // SCP-G5-F-CORR-01 (R39): dispatch was attempted without a current
+    // SERVICEABLE owner judgement. A code rather than a message so an adapter,
+    // an operator and a test can all act on it without parsing prose.
+    "QUALIFICATION_REQUIRED",
 
     // Assignment
     "ASSIGNMENT_CONFLICT",

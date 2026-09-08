@@ -9,7 +9,8 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import type { Pool } from "pg";
 import { withTransaction } from "../../src/db/pool";
-import { getCorePool, resetCore, seedWorld, windowStartingInHours, idemKey } from "./coreTestDb";
+import {
+    qualifyForDispatch, getCorePool, resetCore, seedWorld, windowStartingInHours, idemKey } from "./coreTestDb";
 import { createServiceRequest, loadRequest } from "../../src/core/request/serviceRequest";
 import {
     expireDispatchOffers,
@@ -40,6 +41,10 @@ async function seedDispatchedRequest(pool: Pool, offeredMinutesAgo = 0) {
         );
         if (!created.ok) throw new Error(created.message);
 
+        // SCP-G5-F-CORR-01 (R39): dispatch now requires a current SERVICEABLE
+        // owner judgement at the authoritative boundary, so the fixture
+        // records one through the real governed action first.
+        await qualifyForDispatch(client, "bali", created.value.requestId);
         const offered = await offerDispatch(
             client,
             {
@@ -104,6 +109,10 @@ d("G2-E10 — Dispatch Offer", () => {
             expect(created.ok).toBe(true);
             if (!created.ok) return;
 
+            // SCP-G5-F-CORR-01 (R39): dispatch now requires a current SERVICEABLE
+            // owner judgement at the authoritative boundary, so the fixture
+            // records one through the real governed action first.
+            await qualifyForDispatch(client, "bali", created.value.requestId);
             const offered = await offerDispatch(
                 client,
                 {
