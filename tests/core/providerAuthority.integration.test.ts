@@ -19,6 +19,7 @@ import {
 } from "../../src/core/identity/authority";
 import { createServiceRequest } from "../../src/core/request/serviceRequest";
 import { SYSTEM_ACTOR } from "../../src/core/types";
+import { anchoredHoursAhead } from "../support/testTime";
 
 const RUN = process.env["RUN_INTEGRATION"] === "1";
 const d = RUN ? describe : describe.skip;
@@ -113,7 +114,7 @@ d("G2-E04/E05 — Provider aggregate and scoped authority", () => {
                     marketId: world.marketId,
                     customerIdentityId: world.customerIdentityId,
                     serviceId: world.serviceId,
-                    startTime: new Date(Date.now() + 3_600_000)
+                    startTime: anchoredHoursAhead(1)
                 },
                 SYSTEM_ACTOR,
                 idemKey("create")

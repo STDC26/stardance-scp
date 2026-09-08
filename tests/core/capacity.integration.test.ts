@@ -18,6 +18,7 @@ import {
     withdrawProviderCapacity
 } from "../../src/core/capacity/capacity";
 import { SYSTEM_ACTOR } from "../../src/core/types";
+import { anchoredHoursAhead } from "../support/testTime";
 
 const RUN = process.env["RUN_INTEGRATION"] === "1";
 const d = RUN ? describe : describe.skip;
@@ -51,7 +52,9 @@ d("G2-E07 — exclusive capacity is transactionally protected", () => {
             ).toBe(true);
 
             // Far outside the declared window.
-            const farStart = new Date(Date.now() + 400 * 24 * 3_600_000);
+            // Deliberately far outside the seeded 30-day window. Anchored so
+            // "far outside" is a determined instant, not a drifting one.
+            const farStart = anchoredHoursAhead(400 * 24);
             expect(
                 await hasDeclaredAvailability(client, {
                     marketId: world.marketId,

@@ -20,6 +20,8 @@ import { resolveSession, hashToken } from "../../src/provider/session";
 import { activeConfiguration } from "../../src/config/tenant/store";
 import { resolveFromStored } from "../../src/runtime/effectiveConfiguration";
 import type { PartnerHost } from "../../src/host/partnerHost";
+import { anchoredSlot } from "../support/testTime";
+import { futureMonday } from "./providerTestDb";
 import {
     SCOPE,
     activate,
@@ -151,12 +153,7 @@ d("G5-E / approved supply is consumable by the real G3 kernel", () => {
                 serviceId,
                 customerIdentityId,
                 serviceAreaKey: "Seminyak",
-            requestedStart: DateTime.now()
-                .setZone("Asia/Makassar")
-                .plus({ weeks: 2 })
-                .startOf("week")
-                .plus({ days: 2, hours: 10 })
-                .toJSDate()
+            requestedStart: anchoredSlot(futureMonday(), 3, 10).instant.toJSDate()
         });
         expect(evaluation.outcome).not.toBe("SELLABLE");
         expect(evaluation.reasonCode).toBe("NO_ELIGIBLE_PROVIDER");
@@ -173,11 +170,7 @@ d("G5-E / approved supply is consumable by the real G3 kernel", () => {
             token: owner.token,
             body: { cardId: card.body["cardId"] }
         });
-        const weekStartDate = DateTime.now()
-            .setZone("Asia/Makassar")
-            .plus({ weeks: 2 })
-            .startOf("week")
-            .toFormat("yyyy-MM-dd");
+        const weekStartDate = futureMonday();
         await call(host.origin, "POST", "/api/partner/availability", {
             token,
             body: { weekStartDate, days: week() }

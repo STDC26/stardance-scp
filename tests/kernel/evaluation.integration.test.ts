@@ -155,6 +155,9 @@ d("G3-E02 — eligibility determinism", () => {
                 topology: "MOBILE",
                 serviceId: w.serviceId,
                 customerIdentityId: w.customerIdentityId,
+                // Inside the 60-minute minimum lead time. The 5-minute offset
+                // from the real clock IS the invariant under test, so it stays
+                // relative — SCP-R36 removes accidental time, not intentional.
                 requestedStart: new Date(Date.now() + 5 * 60_000),
                 serviceAreaKey: w.serviceAreaKey
             });

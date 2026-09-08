@@ -21,6 +21,7 @@ import { createSellableOffer, loadOffer } from "../../src/kernel/offer";
 import { commitOffer } from "../../src/kernel/commit";
 import { SYSTEM_ACTOR } from "../../src/core/types";
 import { isKernelDecisionReason } from "../../src/kernel/reasons";
+import { anchoredHoursAhead } from "../support/testTime";
 
 const RUN = process.env["RUN_INTEGRATION"] === "1";
 const d = RUN ? describe : describe.skip;
@@ -37,7 +38,7 @@ d("G3-E15 — concurrency and operational readiness", () => {
 
     it("50 concurrent evaluations complete without correctness loss", async () => {
         const w = await withTransaction(pool, (c) => seedMobileWorld(c));
-        const effectiveAt = new Date();
+        const effectiveAt = anchoredHoursAhead(0);
 
         const results = await Promise.all(
             Array.from({ length: 50 }, (_, i) =>

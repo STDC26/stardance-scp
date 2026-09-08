@@ -13,6 +13,7 @@ import { DateTime } from "luxon";
 import type { Pool, PoolClient } from "pg";
 import { createPool } from "../../src/db/pool";
 import { loadMarketConfig, type MarketId } from "../../src/config/marketConfig";
+import { instantAtLeastDaysAhead } from "../support/testTime";
 
 export function getKernelPool(): Pool {
     return createPool({ database: process.env["PGDATABASE"] ?? "freshline_msos_test" });
@@ -38,16 +39,13 @@ export async function resetKernel(pool: Pool): Promise<void> {
  * skipped forward past any weekend so INSTORE location hours (seeded Mon-Sat)
  * always apply.
  */
-export function localSlot(marketId: MarketId, daysAhead: number, hour: number): Date {
-    const tz = loadMarketConfig(marketId).timezone;
-    let dt = DateTime.now()
-        .setZone(tz)
-        .plus({ days: daysAhead })
-        .set({ hour, minute: 0, second: 0, millisecond: 0 });
-    while (dt.weekday === 7) {
-        dt = dt.plus({ days: 1 });
-    }
-    return dt.toJSDate();
+export function localSlot(_marketId: MarketId, daysAhead: number, hour: number): Date {
+    // SCP-R36: the weekday is pinned by construction now. The old form derived
+    // it from the execution date and then patched Sundays away with a
+    // `while (weekday === 7)` skip — a patch that only existed because the
+    // weekday floated. INSTORE location hours are seeded Mon-Sat, and the
+    // anchored weekday (Monday) is inside that by design rather than by luck.
+    return instantAtLeastDaysAhead(daysAhead, hour);
 }
 
 let seq = 0;

@@ -21,6 +21,7 @@ import {
     issueOwnerSession,
     type PartnerHost
 } from "../../src/host/partnerHost";
+import { anchorMonday } from "../support/testTime";
 
 export const SCOPE = { tenantId: "freshline-bali", marketId: "bali", environment: "candidate" };
 export const ACTOR = "PTC/DRJ";
@@ -211,11 +212,7 @@ export function validProfile(overrides: Record<string, unknown> = {}): Record<st
 
 /** The Monday of a week comfortably in the future, in the governed timezone. */
 export function futureMonday(weeksAhead = 2): string {
-    return DateTime.now()
-        .setZone("Asia/Makassar")
-        .plus({ weeks: weeksAhead })
-        .startOf("week")
-        .toFormat("yyyy-MM-dd");
+    return anchorMonday(weeksAhead);
 }
 
 export interface DaySpec {

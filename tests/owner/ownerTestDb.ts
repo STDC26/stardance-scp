@@ -30,6 +30,7 @@ import {
     week,
     SCOPE
 } from "../provider/providerTestDb";
+import { anchorMonday, anchoredSlot } from "../support/testTime";
 
 export { SCOPE, activate };
 
@@ -43,25 +44,10 @@ export async function resetOwner(pool: Pool): Promise<void> {
 }
 
 /** The Monday of a week comfortably in the future, in the governed timezone. */
-export function anchorMonday(weeksAhead = 2): string {
-    return DateTime.now()
-        .setZone("Asia/Makassar")
-        .plus({ weeks: weeksAhead })
-        .startOf("week")
-        .toFormat("yyyy-MM-dd");
-}
+export { anchorMonday };
 
 /** A fixed market-local instant on a weekday of the anchored week. */
-export function anchoredSlot(
-    monday: string,
-    isoDay: number,
-    hour = 11
-): { date: string; time: string; instant: DateTime } {
-    const local = DateTime.fromISO(monday, { zone: "Asia/Makassar" })
-        .plus({ days: isoDay - 1 })
-        .set({ hour, minute: 0, second: 0, millisecond: 0 });
-    return { date: local.toFormat("yyyy-MM-dd"), time: local.toFormat("HH:mm"), instant: local };
-}
+export { anchoredSlot };
 
 export interface OwnerWorld {
     pool: Pool;

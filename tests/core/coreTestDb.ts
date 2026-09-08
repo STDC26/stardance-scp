@@ -7,6 +7,7 @@ import type { Pool, PoolClient } from "pg";
 import { createPool } from "../../src/db/pool";
 import { executeOperationalAction } from "../../src/lifecycle/orchestrator";
 import type { MarketId } from "../../src/config/marketConfig";
+import { anchoredHoursAhead } from "../support/testTime";
 
 export function getCorePool(): Pool {
     return createPool({ database: process.env["PGDATABASE"] ?? "freshline_msos_test" });
@@ -131,9 +132,16 @@ export async function seedWorld(
     };
 }
 
-/** Deterministic future window helper. */
+/**
+ * A future window, `hours` after the deterministic anchor.
+ *
+ * SCP-R36: this used to be `Date.now() + hours`, which meant the market-local
+ * hour and weekday of every Core fixture drifted with the execution clock. The
+ * distance from now is what these scenarios intend (the seeded capacity window
+ * is `now() +/- interval`); the hour and weekday never were.
+ */
 export function windowStartingInHours(hours: number): Date {
-    return new Date(Date.now() + hours * 3_600_000);
+    return anchoredHoursAhead(hours);
 }
 
 let keySeq = 0;

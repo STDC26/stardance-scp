@@ -81,11 +81,19 @@ d("G2-E10 — Dispatch Offer", () => {
         // Bali is 15 and Bangkok is 20 — a Core constant could not produce both.
         expect(configured).toBe(15);
         expect(offer).not.toBeNull();
-        const windowMinutes = Math.round(
-            (offer!.expiresAt.getTime() - (Date.now() - 0)) / 60_000
+        // SCP-R36: this used to measure the remaining window against the real
+        // clock and allow +/-1 minute of slack for it, which made a correctness
+        // assertion fail if the machine stalled for a minute. The invariant is
+        // a relation between two persisted values — the offer's own start and
+        // its expiry — so it is asserted exactly, and no amount of machine
+        // slowness can move it.
+        const { rows } = await pool.query<{ offered_at: Date; expires_at: Date }>(
+            `SELECT offered_at, expires_at FROM core_dispatch_offer WHERE offer_id = $1`,
+            [offerId]
         );
-        expect(windowMinutes).toBeGreaterThanOrEqual(configured - 1);
-        expect(windowMinutes).toBeLessThanOrEqual(configured + 1);
+        const windowMinutes =
+            (rows[0]!.expires_at.getTime() - rows[0]!.offered_at.getTime()) / 60_000;
+        expect(windowMinutes).toBe(configured);
     });
 
     it("refuses to dispatch to unapproved supply", async () => {

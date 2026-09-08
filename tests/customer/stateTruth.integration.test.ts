@@ -30,6 +30,7 @@ import {
     startHostOrThrow,
     validIntent
 } from "./customerTestDb";
+import { anchoredHoursAhead } from "../support/testTime";
 
 const RUN = process.env["RUN_INTEGRATION"] === "1";
 const d = RUN ? describe : describe.skip;
@@ -218,8 +219,8 @@ d("G5-D / channel non-authority — the request exists before, and despite, any 
             priceMinorUnits: 350_000,
             currencyCode: "IDR",
             durationMinutes: 45,
-            startTime: new Date(),
-            endTime: new Date(),
+            startTime: anchoredHoursAhead(0),
+            endTime: anchoredHoursAhead(1),
             idempotencyKey: "handoff-success",
             correlationId: "corr-success",
             lineage: {

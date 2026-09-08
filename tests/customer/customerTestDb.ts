@@ -16,6 +16,7 @@ import {
 import { FRESHLINE_BALI_V2, cloneBundle } from "../../src/config/tenant/freshline";
 import type { TenantConfigurationBundleV2 } from "../../src/config/tenant/contract";
 import { startCustomerHost, type CustomerHost } from "../../src/host/customerHost";
+import { slotAtLeastDaysAhead } from "../support/testTime";
 
 export const SCOPE = { tenantId: "freshline-bali", marketId: "bali", environment: "candidate" };
 export const ACTOR = "PTC/DRJ";
@@ -108,11 +109,7 @@ export async function startHostOrThrow(
  * clock at which it happens to run.
  */
 export function futureSlot(daysAhead = 3, hour = 10): { date: string; time: string } {
-    const local = DateTime.now()
-        .setZone("Asia/Makassar")
-        .plus({ days: daysAhead })
-        .set({ hour, minute: 0, second: 0, millisecond: 0 });
-    return { date: local.toFormat("yyyy-MM-dd"), time: local.toFormat("HH:mm") };
+    return slotAtLeastDaysAhead(daysAhead, hour);
 }
 
 let seq = 0;

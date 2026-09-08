@@ -4,6 +4,7 @@
 
 import { Pool } from "pg";
 import { createPool } from "../src/db/pool";
+import { anchoredHoursAhead } from "./support/testTime";
 
 export function getIntegrationPool(): Pool {
     return createPool({
@@ -39,8 +40,12 @@ export async function seedDispatchedAppointment(
     );
     const serviceId = serviceResult.rows[0]!.service_id;
 
+    // SCP-R36: `dispatchedAt` is genuinely relative — the timeout-recovery rule
+    // is "dispatched more than N minutes ago", so the offset from now IS the
+    // scenario. The appointment window is not: it is anchored so its
+    // market-local hour and weekday are the same on every run.
     const dispatchedAt = new Date(Date.now() - minutesAgo * 60_000);
-    const startTime = new Date(Date.now() + 60 * 60_000);
+    const startTime = anchoredHoursAhead(1);
     const endTime = new Date(startTime.getTime() + 60 * 60_000);
 
     const apptResult = await pool.query<{ appointment_id: string }>(

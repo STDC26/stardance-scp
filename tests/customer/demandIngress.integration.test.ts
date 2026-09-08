@@ -28,6 +28,12 @@ import {
 const RUN = process.env["RUN_INTEGRATION"] === "1";
 const d = RUN ? describe : describe.skip;
 
+/** The server's own clock, read from the database the server writes through. */
+async function serverNow(pool: Pool): Promise<Date> {
+    const { rows } = await pool.query<{ n: Date }>(`SELECT now() AS n`);
+    return rows[0]!.n;
+}
+
 async function requestCount(pool: Pool): Promise<number> {
     const { rows } = await pool.query<{ n: string }>(`SELECT count(*) AS n FROM core_service_request`);
     return Number(rows[0]!.n);
@@ -154,16 +160,43 @@ d("G5-D / demand ingress — customer intent becomes canonical SCP demand", () =
 
     it("the server clock is authoritative and the client never supplies an instant", async () => {
         const slot = futureSlot(4, 14);
-        const submittedAt = Date.now();
+
+        // SCP-R36: this used to assert the received-at was within 30 real
+        // seconds of the client's own `Date.now()`, which made a correctness
+        // test fail whenever the machine was slow — it was measuring the
+        // harness, not the product. The invariant it was reaching for is that
+        // the instant is the SERVER's. That is stated exactly here: bracket it
+        // between two server-side clock readings taken around the call. It
+        // holds whether the request takes a millisecond or an hour.
+        const before = await serverNow(pool);
         const response = await post(
             host.origin,
             INGRESS_PATH,
             validIntent({ requestedDate: slot.date, requestedTime: slot.time })
         );
+        const after = await serverNow(pool);
         const demand = await loadDemand(pool, response.body["requestId"] as string);
 
-        // Received-at is the server's, not anything that crossed the wire.
-        expect(Math.abs(demand.server_received_at.getTime() - submittedAt)).toBeLessThan(30_000);
+        const receivedAt = demand.server_received_at.getTime();
+        expect(receivedAt).toBeGreaterThanOrEqual(before.getTime());
+        expect(receivedAt).toBeLessThanOrEqual(after.getTime());
+
+        // And the stronger half of the same claim: the client is structurally
+        // incapable of supplying one. The closed intake contract refuses it
+        // rather than preferring the server's value over it.
+        for (const field of ["serverReceivedAt", "submittedAt", "receivedAt"]) {
+            const forged = await post(
+                host.origin,
+                INGRESS_PATH,
+                validIntent({
+                    requestedDate: slot.date,
+                    requestedTime: slot.time,
+                    [field]: new Date(0).toISOString()
+                })
+            );
+            expect(forged.status, `${field} must be refused`).toBe(422);
+            expect(forged.body["error"]).toBe("UNDECLARED_FIELD");
+        }
 
         // The instant is resolved from the market-local selection, in the
         // governed timezone — not from a client-supplied timestamp.
