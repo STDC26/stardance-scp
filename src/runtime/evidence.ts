@@ -51,7 +51,19 @@ export type RuntimeEvidenceKind =
     | "OWNER_COMMAND_REFUSED"
     | "OWNER_QUALIFICATION_RECORDED"
     | "OWNER_MATCH_EVALUATED"
-    | "OWNER_SUPPLY_SYNCHRONIZED";
+    | "OWNER_SUPPLY_SYNCHRONIZED"
+    // G5-G (additive, mirrors migration 016): what the CHANNEL did. Transport
+    // evidence, never business truth — a message being delivered is not a
+    // person agreeing.
+    | "CHANNEL_MESSAGE_CREATED"
+    | "CHANNEL_MESSAGE_SENT"
+    | "CHANNEL_SEND_FAILED"
+    | "CHANNEL_DELIVERY_RECEIPT"
+    | "CHANNEL_WEBHOOK_REJECTED"
+    | "CHANNEL_EVENT_ACCEPTED"
+    | "CHANNEL_EVENT_REPLAYED"
+    | "CHANNEL_INTENT_REFUSED"
+    | "CHANNEL_ACTION_INVOKED";
 
 export interface RuntimeEvidenceInput {
     kind: RuntimeEvidenceKind;
