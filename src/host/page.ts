@@ -111,6 +111,34 @@ export function renderCustomerPage(options: PageOptions): string {
         )
         .join("\n");
 
+    // SCP-G5-H-UX-CLOSE-03 — the Freshline presentation layer.
+    //
+    // Every value here comes from the same governed projection the booking form
+    // already uses: names, prices and durations are the catalogue's, not a
+    // second copy written into the page. A card that quoted its own price would
+    // be a second commercial authority, which is the thing this whole gate
+    // exists to prevent.
+    const serviceCards = p.catalogue.services
+        .map(
+            (s) => `    <article class="svc-card">
+      <h3>${escapeHtml(s.name)}</h3>
+      <p class="svc-price">${escapeHtml(s.price.display)}</p>
+      <p class="svc-meta">${s.durationMinutes} ${escapeHtml(t("customer", "card_duration", locale))}</p>
+      <a class="svc-pick" href="#booking" data-service="${escapeHtml(s.code)}">${escapeHtml(
+                t("customer", "card_select", locale)
+            )}</a>
+    </article>`
+        )
+        .join("\n");
+
+    const navLinks = [
+        ["#services", t("customer", "nav_services", locale)],
+        ["#how", t("customer", "nav_how", locale)],
+        ["#booking", t("customer", "nav_book", locale)]
+    ]
+        .map(([href, label]) => `<a class="navlink" href="${href}">${escapeHtml(label!)}</a>`)
+        .join("");
+
     const regions = p.market.regions
         .map((region, index) => chip("region", region, region, null, index === 0))
         .join("\n");
@@ -154,7 +182,41 @@ html,body{margin:0;padding:0}
 body{background:var(--black);color:var(--white);font-family:var(--body);
   font-size:16px;line-height:1.5;-webkit-text-size-adjust:100%}
 .wrap{width:100%;max-width:560px;margin:0 auto;padding:20px 16px 96px}
-header{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:4px}
+header{margin-bottom:4px}
+.brandbar{display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap}
+/* SCP-G5-H-UX-CLOSE-03 — the Freshline presentation layer. Every colour and
+   face below is a brand token from the governed BRAND plane; nothing here
+   introduces a tenant-specific rule. Mobile-first: the grid is one column and
+   only widens where there is room, so 320px never has to scroll sideways. */
+.sitenav{display:flex;flex-wrap:wrap;gap:4px 16px;margin:10px 0 0;
+  border-top:1px solid rgba(231,236,239,.14);padding-top:10px}
+.navlink{color:var(--silver);opacity:.85;text-decoration:none;font-size:.85rem;
+  letter-spacing:.06em;text-transform:uppercase;font-family:var(--heading);
+  min-height:44px;display:inline-flex;align-items:center}
+.navlink:hover,.navlink:focus-visible{color:var(--teal);opacity:1}
+.hero{margin:18px 0 24px}
+.hero-lede{font-family:var(--heading);font-weight:700;font-size:1.5rem;line-height:1.15;
+  letter-spacing:.01em;margin:0 0 8px;color:var(--white)}
+.hero-cta{display:inline-flex;align-items:center;justify-content:center;min-height:48px;
+  padding:12px 22px;margin:6px 0 10px;background:var(--teal);color:var(--black);
+  font-family:var(--heading);font-weight:700;letter-spacing:.06em;text-transform:uppercase;
+  border-radius:12px;text-decoration:none;max-width:100%}
+.hero-cta:hover,.hero-cta:focus-visible{background:var(--teal-hover)}
+.services,.how{margin:0 0 26px}
+.editorial{color:var(--silver);opacity:.8;font-size:.95rem;line-height:1.5;margin:0 0 14px}
+.svc-grid{display:grid;grid-template-columns:1fr;gap:12px}
+.svc-card{border:1px solid rgba(231,236,239,.18);border-radius:14px;padding:16px;min-width:0}
+.svc-card h3{font-family:var(--heading);font-weight:700;font-size:1.05rem;margin:0 0 6px;
+  text-transform:uppercase;letter-spacing:.04em}
+.svc-price{color:var(--teal);font-weight:700;margin:0 0 2px}
+.svc-meta{color:var(--silver);opacity:.7;font-size:.85rem;margin:0 0 12px}
+.svc-pick{display:inline-flex;align-items:center;justify-content:center;min-height:44px;
+  padding:8px 18px;border:1px solid var(--teal);color:var(--teal);border-radius:999px;
+  text-decoration:none;font-size:.85rem;letter-spacing:.04em;text-transform:uppercase}
+.svc-pick:hover,.svc-pick:focus-visible{background:var(--teal);color:var(--black)}
+.how-steps{margin:0;padding-left:20px;color:var(--silver);opacity:.85;line-height:1.6}
+.how-steps li{margin:0 0 6px}
+@media (min-width:600px){.svc-grid{grid-template-columns:repeat(auto-fit,minmax(220px,1fr))}}
 h1{font-family:var(--heading);font-weight:700;letter-spacing:.02em;font-size:1.6rem;margin:0}
 h1 .mkt{color:var(--teal)}
 .tagline{color:var(--silver);opacity:.8;font-size:.95rem;margin:2px 0 4px}
@@ -216,11 +278,36 @@ button:disabled{opacity:.55;cursor:progress}
 <body>
 <div class="wrap">
 <header>
-  <h1>${escapeHtml(p.brand.publicName)} <span class="mkt">${escapeHtml(p.brand.marketDescriptor)}</span></h1>
-  <nav aria-label="${escapeHtml(t("customer", "language", locale))}">${languageLinks}</nav>
+  <div class="brandbar">
+    <h1>${escapeHtml(p.brand.publicName)} <span class="mkt">${escapeHtml(p.brand.marketDescriptor)}</span></h1>
+    <nav aria-label="${escapeHtml(t("customer", "language", locale))}">${languageLinks}</nav>
+  </div>
+  <nav class="sitenav" aria-label="${escapeHtml(t("customer", "nav_services", locale))}">${navLinks}</nav>
 </header>
-<p class="tagline">${escapeHtml(p.brand.tagline)}</p>
-<p class="hours">${escapeHtml(openHours)}</p>
+
+<section class="hero">
+  <p class="hero-lede">${escapeHtml(t("customer", "hero_lede", locale))}</p>
+  <p class="tagline">${escapeHtml(p.brand.tagline)}</p>
+  <a class="hero-cta" href="#booking">${escapeHtml(t("customer", "hero_cta", locale))}</a>
+  <p class="hours">${escapeHtml(openHours)}</p>
+</section>
+
+<section class="services" id="services">
+  <h2>${escapeHtml(t("customer", "heading_choose", locale))}</h2>
+  <p class="editorial">${escapeHtml(t("customer", "editorial_lede", locale))}</p>
+  <div class="svc-grid">
+${serviceCards}
+  </div>
+</section>
+
+<section class="how" id="how">
+  <h2>${escapeHtml(t("customer", "how_heading", locale))}</h2>
+  <ol class="how-steps">
+    <li>${escapeHtml(t("customer", "how_1", locale))}</li>
+    <li>${escapeHtml(t("customer", "how_2", locale))}</li>
+    <li>${escapeHtml(t("customer", "how_3", locale))}</li>
+  </ol>
+</section>
 
 <form id="booking" novalidate>
   <h2>${escapeHtml(t("customer", "heading_service", locale))}</h2>
@@ -298,6 +385,22 @@ ${regions}
   // A stable key for THIS filled-in form. Pressing send twice, or a flaky
   // connection retrying, must not produce two requests. The server validates
   // the shape and remains the authority on what a replay means.
+  Array.prototype.forEach.call(document.querySelectorAll('.svc-pick'), function (link) {
+    link.addEventListener('click', function () {
+      var code = link.getAttribute('data-service');
+      // getElementsByName rather than a selector string built from the field
+      // name: the page must carry exactly one named occurrence per real
+      // control, and a selector literal would read as another one.
+      var radios = document.getElementsByName('serviceCode');
+      for (var i = 0; i < radios.length; i++) {
+        if (radios[i].value === code) {
+          radios[i].checked = true;
+          radios[i].dispatchEvent(new Event('change', { bubbles: true }));
+        }
+      }
+    });
+  });
+
   var key = 'web-' + Date.now().toString(36) + '-' +
             Math.random().toString(36).slice(2, 10);
 

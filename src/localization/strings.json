@@ -243,6 +243,58 @@
     "error_generic": {
       "en": "Something went wrong on our side. Your details are still here — please try again.",
       "id": "Terjadi kesalahan di pihak kami. Detail Anda masih tersimpan — silakan coba lagi."
+    },
+    "nav_services": {
+      "en": "Services",
+      "id": "Layanan"
+    },
+    "nav_how": {
+      "en": "How it works",
+      "id": "Cara kerja"
+    },
+    "nav_book": {
+      "en": "Book",
+      "id": "Pesan"
+    },
+    "hero_lede": {
+      "en": "The barber that comes to you.",
+      "id": "Barber yang datang ke tempat Anda."
+    },
+    "hero_cta": {
+      "en": "Book your slot",
+      "id": "Pesan jadwal Anda"
+    },
+    "heading_choose": {
+      "en": "Choose your Fresh",
+      "id": "Pilih Fresh Anda"
+    },
+    "editorial_lede": {
+      "en": "Three clear ways to get Fresh. Every price and duration below is the governed one — what you see is what is booked.",
+      "id": "Tiga cara jelas untuk tampil Fresh. Setiap harga dan durasi di bawah ini sudah baku — yang Anda lihat itulah yang dipesan."
+    },
+    "card_duration": {
+      "en": "minutes",
+      "id": "menit"
+    },
+    "card_select": {
+      "en": "Select",
+      "id": "Pilih"
+    },
+    "how_heading": {
+      "en": "How it works",
+      "id": "Cara kerja"
+    },
+    "how_1": {
+      "en": "Tell us what you want and when.",
+      "id": "Beri tahu kami layanan dan waktunya."
+    },
+    "how_2": {
+      "en": "We match a Freshline barber who covers your area that day.",
+      "id": "Kami carikan barber Freshline yang melayani area Anda hari itu."
+    },
+    "how_3": {
+      "en": "You confirm. We come to you.",
+      "id": "Anda konfirmasi. Kami yang datang."
     }
   },
   "partner": {
