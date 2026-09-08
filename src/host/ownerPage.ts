@@ -140,6 +140,19 @@ button:disabled{opacity:.5;cursor:not-allowed}
   letter-spacing:.05em;border:1px solid var(--teal);color:var(--teal)}
 .stage.closed{border-color:rgba(231,236,239,.3);color:var(--silver)}
 .actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+/* SCP-G5-H-UX-CLOSE-03B — the coverage view. Brand tokens only, no
+   tenant-specific rule, one column on mobile so 320px never scrolls sideways. */
+.cov-head{display:flex;flex-wrap:wrap;align-items:baseline;gap:8px;margin:4px 0 8px}
+.cov-count{font-family:var(--heading);font-weight:700;font-size:1.1rem;color:var(--teal)}
+.cov-regions{color:var(--silver);opacity:.8;font-size:.85rem;min-width:0;word-break:break-word}
+.cov-row{border:1px solid rgba(231,236,239,.18);border-radius:12px;padding:12px;margin:8px 0;min-width:0}
+.cov-name{font-family:var(--heading);font-weight:700;letter-spacing:.03em;margin:0 0 4px}
+.cov-meta{color:var(--silver);opacity:.75;font-size:.85rem;margin:0 0 6px;word-break:break-word}
+.cov-days{display:flex;flex-wrap:wrap;gap:6px;margin:0}
+.cov-day{border:1px solid rgba(231,236,239,.22);border-radius:999px;padding:3px 10px;
+  font-size:.78rem;color:var(--silver);min-width:0}
+.cov-day.on{border-color:var(--teal);color:var(--teal)}
+.cov-empty{color:var(--silver);opacity:.75;font-size:.9rem;margin:8px 0}
 .sep{margin:14px 0;border-top:1px solid rgba(231,236,239,.12)}
 .notice{border-left:2px solid var(--teal);padding:6px 0 6px 10px;margin:10px 0;
   color:var(--silver);opacity:.75;font-size:.82rem}
@@ -178,7 +191,13 @@ rating/commission ${escapeHtml(p.commerce.ratingCommissionState)}${
   </label>
 </div>
 
+<div class="bar">
+  <input type="date" id="week" aria-label="Week starting Monday">
+  <button id="loadCoverage">Load coverage</button>
+</div>
+
 <section id="errors" class="card err" hidden></section>
+<section id="coverage"></section>
 <section id="queue"></section>
 <div class="sep"></div>
 <h3 style="font-family:var(--heading)">Last response</h3>
@@ -334,6 +353,76 @@ rating/commission ${escapeHtml(p.commerce.ratingCommissionState)}${
     }).catch(function(e){ fail(String(e)); });
   }
 
+  var DAYS = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+
+  function renderCoverage(data){
+    var host = document.getElementById('coverage');
+    host.innerHTML = '';
+    var head = document.createElement('div'); head.className = 'cov-head';
+    var count = document.createElement('span'); count.className = 'cov-count';
+    text(count, data.approvedSupplyCount + ' approved supply');
+    head.appendChild(count);
+    var regions = document.createElement('span'); regions.className = 'cov-regions';
+    text(regions, data.coverageRegions.length
+      ? 'Coverage: ' + data.coverageRegions.join(', ')
+      : 'No coverage regions for this week.');
+    head.appendChild(regions);
+    host.appendChild(head);
+
+    if (!data.supply.length) {
+      var empty = document.createElement('p'); empty.className = 'cov-empty';
+      text(empty, 'No approved supply for the week beginning ' + data.weekStartDate +
+        '. Matching will find no eligible provider until a Partner Card and a week are both confirmed.');
+      host.appendChild(empty);
+      return;
+    }
+
+    data.supply.forEach(function(entry){
+      var row = document.createElement('div'); row.className = 'cov-row';
+      var name = document.createElement('p'); name.className = 'cov-name';
+      text(name, entry.displayName + ' · ' + entry.publicId);
+      row.appendChild(name);
+      var meta = document.createElement('p'); meta.className = 'cov-meta';
+      text(meta, entry.roleCode + ' · ' + entry.serviceCodes.join(', ') +
+        ' · week ' + entry.weekStartDate + ' v' + entry.availabilityVersion);
+      row.appendChild(meta);
+      var days = document.createElement('div'); days.className = 'cov-days';
+      for (var i = 1; i <= 7; i++) {
+        var day = null;
+        for (var j = 0; j < entry.days.length; j++) {
+          if (entry.days[j].isoDay === i) { day = entry.days[j]; }
+        }
+        var chip = document.createElement('span');
+        chip.className = 'cov-day' + (day ? ' on' : '');
+        text(chip, day
+          ? DAYS[i-1] + ' ' + day.startTimeLocal + '-' + day.endTimeLocal +
+            (day.regions && day.regions.length ? ' · ' + day.regions.join('/') : '')
+          : DAYS[i-1] + ' —');
+        days.appendChild(chip);
+      }
+      row.appendChild(days);
+      row.appendChild((function(){
+        var n = document.createElement('p'); n.className = 'notice';
+        text(n, 'Approved supply is not an assignment. This view reports canonical truth; it does not create it.');
+        return n;
+      })());
+      host.appendChild(row);
+    });
+  }
+
+  function loadCoverage(){
+    clearError();
+    var week = document.getElementById('week').value;
+    if (!week) { fail('Choose the Monday of the week to inspect.'); return Promise.resolve(); }
+    return call('/api/owner/coverage?weekStartDate=' + encodeURIComponent(week)).then(function(res){
+      if (res.status >= 400) { fail(res.json); return; }
+      renderCoverage(res.json);
+      show({ weekStartDate: res.json.weekStartDate, approvedSupplyCount: res.json.approvedSupplyCount,
+             coverageRegions: res.json.coverageRegions, correlationId: res.json.correlationId });
+    }).catch(function(e){ fail(String(e)); });
+  }
+
+  document.getElementById('loadCoverage').addEventListener('click', loadCoverage);
   document.getElementById('load').addEventListener('click', load);
   document.getElementById('closed').addEventListener('change', load);
 })();

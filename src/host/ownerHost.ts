@@ -40,6 +40,7 @@ import {
 } from "../owner/commands";
 import { ownerHttpStatus, type OwnerReason } from "../owner/reasons";
 import { buildOwnerProjection, renderOwnerConsole } from "./ownerPage";
+import { approvedSupply } from "../provider/supply";
 
 export const OWNER_SESSION_HEADER = "x-owner-session";
 
@@ -270,6 +271,36 @@ async function handle(
         const context = contextFor(runtime, session, correlationId);
 
         // ---- reads --------------------------------------------------------
+        // SCP-G5-H-UX-CLOSE-03B (C03A-D07) — the operator can now see the supply
+        // and coverage the matching rules will actually consider.
+        //
+        // This creates no truth. `approvedSupply` is the same governed,
+        // deterministic, server-owned projection G5-E already built and the
+        // kernel already consumes: a provider appears only when every
+        // fail-closed AND holds. Reading it here shows the operator what is
+        // already true; it cannot make anything true. Read-only, Owner session
+        // required, scoped by the runtime's own tenant/market/environment.
+        if (method === "GET" && path === "/api/owner/coverage") {
+            const weekStartDate = url.searchParams.get("weekStartDate");
+            if (!weekStartDate || !/^\d{4}-\d{2}-\d{2}$/.test(weekStartDate)) {
+                return {
+                    kind: "REFUSED" as const,
+                    reason: "FIELD_INVALID" as const,
+                    message: "weekStartDate is required as YYYY-MM-DD"
+                };
+            }
+            const supply = await approvedSupply(client, runtime.configuration, { weekStartDate });
+            return {
+                kind: "DATA" as const,
+                body: {
+                    weekStartDate,
+                    approvedSupplyCount: supply.length,
+                    coverageRegions: [...new Set(supply.flatMap((s) => s.coverageRegions))].sort(),
+                    supply
+                }
+            };
+        }
+
         if (method === "GET" && path === "/api/owner/queue") {
             const includeClosed = url.searchParams.get("includeClosed") === "true";
             const limitParam = Number(url.searchParams.get("limit") ?? "100");
