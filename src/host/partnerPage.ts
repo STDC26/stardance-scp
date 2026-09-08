@@ -236,7 +236,7 @@ h2{font-family:var(--heading);font-weight:700;font-size:1rem;text-transform:uppe
 label.field{display:block;margin:14px 0}
 label.field>span{display:block;font-size:.85rem;color:var(--silver);opacity:.75;margin-bottom:6px}
 input[type=text],input[type=tel],input[type=date],input[type=time],select,textarea{
-  width:100%;min-height:48px;padding:12px 14px;font:inherit;color:var(--white);
+  width:100%;min-width:0;min-height:48px;padding:12px 14px;font:inherit;color:var(--white);
   background:rgba(231,236,239,.06);border:1px solid rgba(231,236,239,.22);border-radius:12px}
 textarea{min-height:96px;resize:vertical}
 input:focus,select:focus,textarea:focus{outline:2px solid var(--teal);outline-offset:1px;border-color:var(--teal)}
@@ -250,13 +250,14 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--teal);outline-of
 .chip input:focus-visible+.chip-body{outline:2px solid var(--teal);outline-offset:2px}
 .chip-label{font-weight:600}
 .chip-sub{font-size:.85rem;color:var(--silver);opacity:.7}
-.day{border:1px solid rgba(231,236,239,.18);border-radius:12px;margin:10px 0;padding:12px}
+.day{border:1px solid rgba(231,236,239,.18);border-radius:12px;margin:10px 0;padding:12px;
+  min-width:0}
 .day legend{font-family:var(--heading);letter-spacing:.06em;text-transform:uppercase;font-size:.8rem;
   color:var(--silver);padding:0 6px}
 .toggle{display:flex;align-items:center;gap:10px;min-height:44px}
 .toggle input{width:22px;height:22px;accent-color:var(--teal)}
-.times{display:flex;gap:10px}
-.times label{flex:1}
+.times{display:flex;flex-wrap:wrap;gap:10px}
+.times label{flex:1 1 130px;min-width:0}
 .times span{display:block;font-size:.8rem;color:var(--silver);opacity:.7;margin-bottom:4px}
 .areas-label{font-size:.8rem;color:var(--silver);opacity:.7;margin:10px 0 0}
 .regions{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}

@@ -238,13 +238,10 @@ d("SCP-G5-H-UX / rendered SCP surfaces", () => {
                 }
             }
         }
-        // UX01-D01, registered rather than repaired: the partner portal is 19px
-        // wider than a 320px viewport, from the availability fieldset. Repairing
-        // it would be a production change, which this tooling-scoped mission is
-        // not authorized to make, so the known state is pinned here instead —
-        // this fails if the overflow spreads to another surface, another
-        // viewport, or grows. Every other surface is clean at every viewport.
-        expect(overflows).toEqual(["partner-portal@320=19px"]);
+        // SCP-G5-H-UX-CLOSE-02: UX01-D01 corrected. The frozen invariant is now
+        // absolute — no page-level horizontal overflow on any surface at any
+        // required viewport.
+        expect(overflows).toEqual([]);
     });
 
     it("the rendered output resolves Reference Brand Configuration 001", async () => {
@@ -259,6 +256,45 @@ d("SCP-G5-H-UX / rendered SCP surfaces", () => {
             expect(surface.tokens.bodyFontInForce, `${label} DM Sans`).toBe(true);
         }
     });
+
+    it("UX01-D01: the availability controls reflow rather than being clipped or hidden", async () => {
+        // Removing an overflow by hiding a control would satisfy the number and
+        // break the product. So the assertion is about the controls themselves:
+        // at 320px both time inputs must still be rendered, visible, inside the
+        // viewport, and large enough to use.
+        const ctx = await browser.newContext({ viewport: { width: 320, height: 720 } });
+        const page = await ctx.newPage();
+        await page.goto(`${world.partnerHost.origin}/`, { waitUntil: "networkidle", timeout: 45_000 });
+        const controls = await page.evaluate(() => {
+            const inputs = Array.from(
+                document.querySelectorAll('fieldset.day input[type=time]')
+            ) as HTMLInputElement[];
+            return inputs.slice(0, 4).map((el) => {
+                const r = el.getBoundingClientRect();
+                const cs = getComputedStyle(el);
+                return {
+                    name: el.name,
+                    width: Math.round(r.width),
+                    height: Math.round(r.height),
+                    right: Math.round(r.right),
+                    visible: cs.display !== "none" && cs.visibility !== "hidden" && cs.opacity !== "0",
+                    clipped: el.scrollWidth > el.clientWidth + 2
+                };
+            });
+        });
+        expect(controls.length).toBeGreaterThanOrEqual(2);
+        for (const c of controls) {
+            expect(c.visible, `${c.name} visible`).toBe(true);
+            expect(c.clipped, `${c.name} not clipped`).toBe(false);
+            expect(c.right, `${c.name} inside viewport`).toBeLessThanOrEqual(320);
+            expect(c.width, `${c.name} usable width`).toBeGreaterThanOrEqual(100);
+            expect(c.height, `${c.name} usable height`).toBeGreaterThanOrEqual(44);
+        }
+        // And the page still must not be sideways-scrollable to reach them.
+        const overflow = await page.evaluate(() => document.documentElement.scrollWidth - 320);
+        expect(overflow).toBeLessThanOrEqual(0);
+        await ctx.close();
+    }, 120_000);
 
     it("touch targets on the narrowest mobile viewport stay usable", async () => {
         for (const [label, surface] of Object.entries(evidence.surfaces)) {
