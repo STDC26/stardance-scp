@@ -12,6 +12,8 @@ import { withTransaction } from "../../src/db/pool";
 import { FRESHLINE_BALI_V2 } from "../../src/config/tenant/freshline";
 import { projectCatalogue } from "../../src/customer/catalogueProjection";
 import { INGRESS_PATH, CONFIGURATION_PATH, type CustomerHost } from "../../src/host/customerHost";
+import { submitCustomerDemand } from "../../src/customer/demandIngress";
+import { anchorMonday, anchoredSlot } from "../support/testTime";
 import {
     SCOPE,
     activate,
@@ -304,19 +306,41 @@ d("G5-D / demand ingress — customer intent becomes canonical SCP demand", () =
         // The refusal left nothing behind.
         expect(await requestCount(pool)).toBe(0);
 
-        const soon = DateTime.now().setZone("Asia/Makassar").plus({ minutes: 10 });
-        expect(
-            (
-                await post(
-                    host.origin,
-                    INGRESS_PATH,
-                    validIntent({
-                        requestedDate: soon.toFormat("yyyy-MM-dd"),
-                        requestedTime: soon.toFormat("HH:mm")
-                    })
-                )
-            ).body["error"]
-        ).toBe("BOOKING_WINDOW_TOO_SOON");
+        // SCP-R36-CLOSE-03 (IRF): this used to build the slot as
+        // `DateTime.now().plus({minutes: 10})` and post it. Production checks
+        // operating hours BEFORE the booking window, so whenever the suite ran
+        // after 22:50 WITA the constructed slot crossed the 23:00 close and the
+        // server correctly answered OUTSIDE_OPERATING_HOURS instead. The
+        // product was right; the fixture was asking a different question
+        // depending on the hour it ran.
+        //
+        // "Too soon" is inherently a statement about the distance from NOW, and
+        // over HTTP the server clock is authoritative by design — proven two
+        // tests above. So the scenario is stated where it can be stated
+        // exactly: through the same governed entry point, with the injectable
+        // server clock production already exposes, and an anchored slot that is
+        // inside operating hours by construction.
+        const soonSlot = anchoredSlot(anchorMonday(), 1, 11);
+        const tenMinutesEarlier = soonSlot.instant.minus({ minutes: 10 }).toJSDate();
+        const tooSoon = await withTransaction(pool, (client) =>
+            submitCustomerDemand(
+                client,
+                { identity: host.runtime.identity, configuration: host.runtime.configuration },
+                {
+                    body: validIntent({
+                        requestedDate: soonSlot.date,
+                        requestedTime: soonSlot.time
+                    }),
+                    correlationId: "r36-close-03-too-soon",
+                    sourceChannel: "WEB_CUSTOMER_SURFACE",
+                    now: tenMinutesEarlier
+                }
+            )
+        );
+        expect(tooSoon.ok).toBe(false);
+        if (!tooSoon.ok) {
+            expect(tooSoon.reason).toBe("BOOKING_WINDOW_TOO_SOON");
+        }
 
         const far = futureSlot(120, 10);
         expect(

@@ -107,18 +107,40 @@ export function anchoredHoursAhead(hours: number, weeksAhead = ANCHOR_WEEKS_OFFS
 }
 
 /**
+ * The governed maximum-advance ceiling, from `config/bali.market.json`.
+ * Stated here so the helper can refuse to straddle it, not to reimplement it.
+ */
+export const MAX_ADVANCE_DAYS = 60;
+
+/** Rounding to the pinned weekday can move a slot by at most six days. */
+export const MAX_ROUNDING_DAYS = 6;
+
+/**
  * The first anchored weekday at least `daysAhead` days out, at `hour`
  * market-local.
  *
  * "At least" matters: the booking-window proofs depend on a slot being beyond
  * the 60-day ceiling (`daysAhead = 120`) or comfortably inside it. Rounding up
  * to the pinned weekday preserves that relation while fixing the weekday.
+ *
+ * SCP-R36-CLOSE-03 (IRF): that rounding is up to six days of movement, which is
+ * harmless everywhere it is currently called but would be silently corrupting
+ * within six days of the max-advance ceiling — a caller asking for 57 days
+ * could land on 61 and get BOOKING_WINDOW_TOO_FAR while believing it had asked
+ * for an acceptable slot. The helper would still look deterministic; it would
+ * just be proving the wrong thing.
+ *
+ * So the unsafe band is refused outright rather than documented. A caller that
+ * needs a slot near the ceiling must state the date itself, where the intent is
+ * visible. This is a test-only contract: it constrains what fixtures may ask
+ * for and changes no production semantics.
  */
 export function slotAtLeastDaysAhead(
     daysAhead: number,
     hour: number,
     isoDay: number = ANCHOR_ISO_DAY
 ): { date: string; time: string } {
+    assertClearOfAdvanceCeiling(daysAhead);
     let local = marketNow()
         .plus({ days: daysAhead })
         .set({ hour, minute: 0, second: 0, millisecond: 0 });
@@ -126,6 +148,27 @@ export function slotAtLeastDaysAhead(
         local = local.plus({ days: 1 });
     }
     return { date: local.toFormat("yyyy-MM-dd"), time: local.toFormat("HH:mm") };
+}
+
+/**
+ * Refuses a request whose weekday rounding could carry it across the governed
+ * max-advance ceiling, in either direction.
+ *
+ * Exported so the contract is falsifiable: a test can assert the refusal
+ * happens rather than trusting a comment that says it should.
+ */
+export function assertClearOfAdvanceCeiling(daysAhead: number): void {
+    const highest = daysAhead + MAX_ROUNDING_DAYS;
+    const straddles = daysAhead <= MAX_ADVANCE_DAYS && highest > MAX_ADVANCE_DAYS;
+    if (straddles) {
+        throw new Error(
+            `slotAtLeastDaysAhead(${daysAhead}) is unsafe: rounding to the pinned weekday ` +
+                `can move it up to ${MAX_ROUNDING_DAYS} days, to ${highest}, crossing the ` +
+                `governed ${MAX_ADVANCE_DAYS}-day advance ceiling. The slot would sometimes be ` +
+                `inside the booking window and sometimes outside it, and the proof would not ` +
+                `say which. State an explicit date for scenarios near the ceiling.`
+        );
+    }
 }
 
 /** The same, as an instant. */

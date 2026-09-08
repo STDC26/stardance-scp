@@ -17,6 +17,7 @@ import { DateTime } from "luxon";
 import { DECLARED_TZ } from "./timezoneGuard";
 import {
     ANCHOR_HOUR,
+    assertClearOfAdvanceCeiling,
     ANCHOR_ISO_DAY,
     MARKET_ZONE,
     anchorInstant,
@@ -134,6 +135,32 @@ describe("SCP-R36 / deterministic test time", () => {
             expect(tuesday.instant.weekday).toBe(2);
             expect(tuesday.instant.zoneName).toBe(MARKET_ZONE);
         }
+    });
+
+    it("refuses a horizon whose weekday rounding could straddle the advance ceiling", () => {
+        // SCP-R36-CLOSE-03 (IRF): rounding up to the pinned weekday moves a slot
+        // by up to six days. Within six days of the 60-day governed ceiling that
+        // is the difference between a bookable slot and BOOKING_WINDOW_TOO_FAR,
+        // and the helper would have kept returning a confident-looking answer
+        // either way. The unsafe band must fail loudly, not silently.
+        for (const unsafe of [55, 56, 57, 58, 59, 60]) {
+            expect(
+                () => slotAtLeastDaysAhead(unsafe, 10),
+                `slotAtLeastDaysAhead(${unsafe}) must refuse`
+            ).toThrow(/advance ceiling/);
+            expect(() => instantAtLeastDaysAhead(unsafe, 10)).toThrow(/advance ceiling/);
+            expect(() => assertClearOfAdvanceCeiling(unsafe)).toThrow(/advance ceiling/);
+        }
+        // Everything the suite actually asks for is clear of the band, on both
+        // sides of the ceiling, and must keep working.
+        for (const safe of [3, 4, 30, 54, 61, 120, 200]) {
+            expect(() => assertClearOfAdvanceCeiling(safe)).not.toThrow();
+            expect(slotAtLeastDaysAhead(safe, 10).date).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+        }
+        // The boundary itself: 54 is the last safe value below the ceiling
+        // (54 + 6 = 60, which does not exceed it) and 55 is the first unsafe.
+        expect(() => assertClearOfAdvanceCeiling(54)).not.toThrow();
+        expect(() => assertClearOfAdvanceCeiling(55)).toThrow();
     });
 
     it("is stable when called repeatedly within a run", () => {

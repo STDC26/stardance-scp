@@ -22,6 +22,8 @@ export async function resetSchema(pool: Pool): Promise<void> {
 export interface SeedResult {
     serviceId: string;
     appointmentId: string;
+    /** SCP-R36-CLOSE-03: the offer's own instant, for exact expiry scenarios. */
+    dispatchedAt: Date;
 }
 
 /**
@@ -59,7 +61,9 @@ export async function seedDispatchedAppointment(
         [randomBillingCode(), serviceId, startTime, endTime, dispatchedAt]
     );
 
-    return { serviceId, appointmentId: apptResult.rows[0]!.appointment_id };
+    // SCP-R36-CLOSE-03: hand back the dispatch instant so "not yet expired"
+    // scenarios can be stated against it rather than against the wall clock.
+    return { serviceId, appointmentId: apptResult.rows[0]!.appointment_id, dispatchedAt };
 }
 
 let billingCodeCounter = 0;

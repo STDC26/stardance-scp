@@ -58,7 +58,19 @@ async function seedDispatchedRequest(pool: Pool, offeredMinutesAgo = 0) {
         );
         if (!offered.ok) throw new Error(offered.message);
 
-        return { world, requestId: created.value.requestId, offerId: offered.value.offerId };
+        // SCP-R36-CLOSE-03: hand back the offer's OWN persisted instant so
+        // expiry scenarios can be stated relative to it rather than relative to
+        // whatever the wall clock reads by the time the assertion runs.
+        const { rows } = await client.query<{ offered_at: Date }>(
+            `SELECT offered_at FROM core_dispatch_offer WHERE offer_id = $1`,
+            [offered.value.offerId]
+        );
+        return {
+            world,
+            requestId: created.value.requestId,
+            offerId: offered.value.offerId,
+            offeredAt: rows[0]!.offered_at
+        };
     });
 }
 
@@ -244,9 +256,15 @@ d("G2-E10 — Dispatch Offer", () => {
     });
 
     it("the sweep does NOT touch an offer still inside its window", async () => {
-        const { requestId, offerId } = await seedDispatchedRequest(pool, 5);
+        const { requestId, offerId, offeredAt } = await seedDispatchedRequest(pool, 5);
         await withTransaction(pool, async (client) => {
-            const swept = await expireDispatchOffers(client, "bali");
+            // SCP-R36-CLOSE-03: previously the sweep read the real clock, so
+            // "still inside its window" held only while execution stayed within
+            // 10 minutes of seeding — a correctness assertion resting on
+            // machine speed. Stated against the offer's own instant it is
+            // exact: 10 minutes into a 15-minute window, at any execution speed.
+            const insideWindow = new Date(offeredAt.getTime() + 10 * 60_000);
+            const swept = await expireDispatchOffers(client, "bali", { now: () => insideWindow });
             expect(swept.expired).not.toContain(offerId);
             const request = await loadRequest(client, requestId);
             expect(request!.state).toBe("PROVIDER_DISPATCHED");
@@ -260,8 +278,14 @@ d("G2-E10 — Dispatch Offer", () => {
             await resetCore(pool);
             // Offered 20 minutes ago: the sweep considers it expired, while the
             // acceptance path is given a clock that still considers it live.
-            const { world, requestId, offerId } = await seedDispatchedRequest(pool, 20);
-            const acceptClock = () => new Date(Date.now() - 19 * 60_000);
+            const { world, requestId, offerId, offeredAt } = await seedDispatchedRequest(pool, 20);
+            // SCP-R36-CLOSE-03: anchored to the offer's own instant — 14 minutes
+            // into its 15-minute window — so the acceptance path considers it
+            // live regardless of how long the harness took to get here. The
+            // sweep still reads the real clock, which is strictly past the
+            // expiry (offeredAt + 15 is already behind us), so the race the
+            // test exists to exercise is set up exactly rather than nearly.
+            const acceptClock = () => new Date(offeredAt.getTime() + 14 * 60_000);
 
             const [sweep, accept] = await Promise.all([
                 withTransaction(pool, (client) => expireDispatchOffers(client, "bali")).catch(

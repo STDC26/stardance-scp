@@ -15,6 +15,7 @@ import {
 import { evaluateServiceCommerce } from "../../src/kernel/evaluation";
 import { createSellableOffer } from "../../src/kernel/offer";
 import { SYSTEM_ACTOR } from "../../src/core/types";
+import { anchoredHoursAhead } from "../support/testTime";
 
 const RUN = process.env["RUN_INTEGRATION"] === "1";
 const d = RUN ? describe : describe.skip;
@@ -150,15 +151,23 @@ d("G3-E02 — eligibility determinism", () => {
                 expect(unserviceable.value.reasonCode).toBe("LOCATION_NOT_SERVICEABLE");
             }
 
+            const leadReference = anchoredHoursAhead(2);
             const tooSoon = await evaluateServiceCommerce(client, {
                 marketId: w.marketId,
                 topology: "MOBILE",
                 serviceId: w.serviceId,
                 customerIdentityId: w.customerIdentityId,
-                // Inside the 60-minute minimum lead time. The 5-minute offset
-                // from the real clock IS the invariant under test, so it stays
-                // relative — SCP-R36 removes accidental time, not intentional.
-                requestedStart: new Date(Date.now() + 5 * 60_000),
+                // SCP-R36-CLOSE-03: the lead-time rule is a relation between
+                // `effectiveAt` and `requestedStart`, so both are stated rather
+                // than one being read from the wall clock. The kernel checks
+                // lead time (evaluation.ts:469) before business hours
+                // (evaluation.ts:509), so this site could not have produced the
+                // operating-hours flip IRF found in demand ingress — but
+                // relying on a rule-ordering argument to keep a proof stable is
+                // exactly the fragility R36 exists to remove. Anchored, the
+                // 5-minute lead is exact and no execution delay can move it.
+                effectiveAt: leadReference,
+                requestedStart: new Date(leadReference.getTime() + 5 * 60_000),
                 serviceAreaKey: w.serviceAreaKey
             });
             expect(tooSoon.ok).toBe(true);

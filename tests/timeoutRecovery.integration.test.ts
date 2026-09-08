@@ -57,8 +57,17 @@ d("Timeout sweep vs. acceptance webhook — same-millisecond race (REQ-OPS-TIMEO
     }
 
     it("safety net: sweep does NOT touch a dispatch that is not yet expired", async () => {
-        const { appointmentId } = await seedDispatchedAppointment(pool, 5); // only 5 min old
-        const result = await recoverExpiredDispatches(pool, { timeoutMinutes: 15 });
+        const { appointmentId, dispatchedAt } = await seedDispatchedAppointment(pool, 5);
+        // SCP-R36-CLOSE-03: "not yet expired" previously held only while the
+        // sweep ran within 10 minutes of seeding — a correctness assertion
+        // resting on machine speed, the same defect class IRF found in demand
+        // ingress. Stated against the dispatch's own instant it is exact:
+        // 5 minutes into a 15-minute window, at any execution speed.
+        const fiveMinutesLater = new Date(dispatchedAt.getTime() + 5 * 60_000);
+        const result = await recoverExpiredDispatches(pool, {
+            timeoutMinutes: 15,
+            now: () => fiveMinutesLater
+        });
         expect(result.reverted).not.toContain(appointmentId);
 
         const { rows } = await pool.query(`SELECT status FROM appointments WHERE appointment_id = $1`, [
