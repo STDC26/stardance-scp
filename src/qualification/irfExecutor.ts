@@ -259,11 +259,14 @@ async function startBattery(runId: string): Promise<void> {
             "node_modules/vitest/vitest.mjs",
             "run",
             BATTERY,
-            // QCP2A-R02-D02. Qualification-only harness containment for the
-            // connection terminations T11 deliberately causes. It adds error
-            // listeners; it does not touch the battery, its assertions, or T11's
-            // target population. See src/qualification/g11HarnessSetup.ts.
-            "--setupFiles=src/qualification/g11HarnessSetup.ts",
+            // QCP2A-R02-D02. Qualification-only config that appends the harness
+            // containment setup file for the connection terminations T11
+            // deliberately causes. It adds pg error listeners; it does not touch
+            // the battery, its assertions, or T11's target population, and it
+            // preserves the SCP-R36 timezone pin and guard exactly.
+            // (`--setupFiles` is not a Vitest 1.6 CLI option; it is config-only.)
+            "--config",
+            "vitest.qcp2a.config.ts",
             "--testTimeout=300000",
             "--hookTimeout=200000",
             "--no-file-parallelism",
