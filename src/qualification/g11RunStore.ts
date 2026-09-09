@@ -25,6 +25,9 @@
 
 import type { Pool } from "pg";
 import { createPool } from "../db/pool";
+import { describeError as safeDescribeError, redact } from "./secretSafe";
+
+export { redact } from "./secretSafe";
 
 export type RunState = "CREATED" | "RUNNING" | "COMPLETED" | "FAILED" | "INTERRUPTED";
 export type Stream = "stdout" | "stderr";
@@ -55,16 +58,13 @@ export function isConnectionLoss(e: unknown): boolean {
     return typeof err.message === "string" && CONNECTION_LOSS_PATTERN.test(err.message);
 }
 
+/**
+ * QCP2A-R02-D03. Error description is now an allowlist in `secretSafe`, not an
+ * ad-hoc field copy. The previous version here was already narrow, but narrow by
+ * accident rather than by contract; R02 §14 requires the contract.
+ */
 export function describeError(e: unknown): Record<string, unknown> {
-    const err = e as { message?: string; code?: string; severity?: string; detail?: string } | null;
-    return {
-        message: err?.message ?? String(e),
-        code: err?.code ?? null,
-        severity: err?.severity ?? null,
-        detail: err?.detail ?? null,
-        connectionLoss: isConnectionLoss(e),
-        observedAt: new Date().toISOString()
-    };
+    return safeDescribeError(e, { connectionLoss: isConnectionLoss(e) });
 }
 
 const DDL = `
@@ -116,6 +116,14 @@ CREATE INDEX IF NOT EXISTS qcp2a_g11_run_events_run_idx
 CREATE UNIQUE INDEX IF NOT EXISTS qcp2a_g11_run_events_chunk_idx
     ON qcp2a_g11_run_events (run_id, stream, seq)
     WHERE kind = 'OUTPUT_CHUNK';
+
+-- QCP2A-R02 §12 — the parent bridge must independently capture child process
+-- identity, signal, and the expected/unexpected error split, rather than
+-- inferring terminal integrity from the exit code alone.
+ALTER TABLE qcp2a_g11_runs ADD COLUMN IF NOT EXISTS child_process_id integer;
+ALTER TABLE qcp2a_g11_runs ADD COLUMN IF NOT EXISTS signal text;
+ALTER TABLE qcp2a_g11_runs ADD COLUMN IF NOT EXISTS expected_connection_loss_events jsonb;
+ALTER TABLE qcp2a_g11_runs ADD COLUMN IF NOT EXISTS unexpected_error_count integer;
 `;
 
 export interface RunSeed {
@@ -201,17 +209,6 @@ export class G11RunStore {
         await this.appendEvent(seed.runId, "CREATED", { bridgeProcessIdentity: seed.bridgeProcessIdentity });
     }
 
-    async markRunning(runId: string): Promise<void> {
-        await this.durable((p) =>
-            p.query(
-                `UPDATE qcp2a_g11_runs
-                    SET state='RUNNING', started_at=COALESCE(started_at, now()), updated_at=now()
-                  WHERE run_id=$1`,
-                [runId]
-            )
-        );
-        await this.appendEvent(runId, "RUNNING", null);
-    }
 
     async appendEvent(
         runId: string,
@@ -237,9 +234,27 @@ export class G11RunStore {
         }
     }
 
-    /** Incremental raw output capture — the point is that it lands before the end of the run. */
+    /**
+     * Incremental raw output capture — the point is that it lands before the end
+     * of the run. Redacted on the way in (R02 §15) so a secret can never be at
+     * rest in the durable store, not even between checkpoint and completion.
+     */
     async appendChunk(runId: string, stream: Stream, seq: number, chunk: string): Promise<void> {
-        await this.appendEvent(runId, "OUTPUT_CHUNK", { bytes: Buffer.byteLength(chunk) }, stream, seq, chunk);
+        const safe = redact(chunk);
+        await this.appendEvent(runId, "OUTPUT_CHUNK", { bytes: Buffer.byteLength(safe) }, stream, seq, safe);
+    }
+
+    async markRunning(runId: string, childProcessId: number | null): Promise<void> {
+        await this.durable((p) =>
+            p.query(
+                `UPDATE qcp2a_g11_runs
+                    SET state='RUNNING', started_at=COALESCE(started_at, now()),
+                        child_process_id=$2, updated_at=now()
+                  WHERE run_id=$1`,
+                [runId, childProcessId]
+            )
+        );
+        await this.appendEvent(runId, "RUNNING", { childProcessId });
     }
 
     async recordPoolError(runId: string | null, err: unknown, expected: boolean): Promise<void> {
@@ -273,6 +288,9 @@ export class G11RunStore {
             terminationReason: string | null;
             summary: unknown;
             error?: unknown;
+            signal?: string | null;
+            expectedConnectionLossEvents?: unknown;
+            unexpectedErrorCount?: number | null;
         }
     ): Promise<void> {
         await this.durable((p) =>
@@ -283,6 +301,9 @@ export class G11RunStore {
                         result_summary_json=$8::jsonb,
                         error_json = CASE WHEN $9::jsonb IS NULL THEN error_json
                                           ELSE COALESCE(error_json,'[]'::jsonb) || $9::jsonb END,
+                        signal=$10,
+                        expected_connection_loss_events=$11::jsonb,
+                        unexpected_error_count=$12,
                         updated_at=now()
                   WHERE run_id=$1`,
                 [
@@ -290,18 +311,26 @@ export class G11RunStore {
                     out.state,
                     out.exitCode,
                     out.durationMs,
-                    out.stdout,
-                    out.stderr,
+                    // Defence in depth: the containment layer should mean no secret
+                    // is ever produced, but nothing secret-bearing reaches storage
+                    // unredacted regardless.
+                    redact(out.stdout),
+                    redact(out.stderr),
                     out.terminationReason,
                     JSON.stringify(out.summary ?? null),
-                    out.error === undefined ? null : JSON.stringify([describeError(out.error)])
+                    out.error === undefined ? null : JSON.stringify([describeError(out.error)]),
+                    out.signal ?? null,
+                    JSON.stringify(out.expectedConnectionLossEvents ?? null),
+                    out.unexpectedErrorCount ?? null
                 ]
             )
         );
         await this.appendEvent(runId, out.state, {
             exitCode: out.exitCode,
             durationMs: out.durationMs,
-            terminationReason: out.terminationReason
+            terminationReason: out.terminationReason,
+            signal: out.signal ?? null,
+            unexpectedErrorCount: out.unexpectedErrorCount ?? null
         });
     }
 

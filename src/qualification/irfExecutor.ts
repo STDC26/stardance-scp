@@ -117,12 +117,13 @@ async function runQuery(
             rows: r.rows
         };
     } catch (e) {
-        const err = e as { message?: string; code?: string; detail?: string; severity?: string };
         return {
             ok: false,
             startedAt,
             finishedAt: new Date().toISOString(),
-            error: { message: err.message, code: err.code, detail: err.detail, severity: err.severity }
+            // QCP2A-R02 §14: allowlisted. A pg error can carry a reference to the
+            // client that raised it, and that client holds the password.
+            error: describeError(e)
         };
     }
 }
@@ -145,6 +146,13 @@ function bridgeIdentity(): Record<string, unknown> {
         bridgeProcessIdentity: PROCESS_IDENTITY,
         bridgeBootId: BOOT_ID,
         bridgeProcessStartedAt: new Date(Date.now() - Math.round(process.uptime() * 1000)).toISOString(),
+        // QCP2A-R02 — a single named, non-secret probe variable. It exists to
+        // prove that a Railway restart picks up updated service variables
+        // WITHOUT creating a new deployment, which had to be established on the
+        // disposable bridge before the same mechanism could be relied on to
+        // deliver a rotated credential to the preserved candidate (R02 §17).
+        // Deliberately one fixed non-secret key, never an environment dump.
+        restartProbe: process.env["R02_RESTART_PROBE"] ?? null,
         nodeVersion: process.version,
         dbHost: process.env["PGHOST"] ?? null,
         dbPort: process.env["PGPORT"] ?? null,
@@ -159,14 +167,75 @@ function bridgeIdentity(): Record<string, unknown> {
  * only, and that reading 12/12 as sufficient is exactly the mistake to avoid.
  * `stdout_raw`, `stderr_raw` and `exit_code` remain the authoritative record.
  */
+/** Vitest colourises its summary; the ANSI codes broke the R01 summary regexes. */
+function stripAnsi(s: string): string {
+    // eslint-disable-next-line no-control-regex
+    return s.replace(/\[[0-9;]*m/g, "");
+}
+
+/**
+ * QCP2A-R02 §12 — the parent bridge parses the harness's structured events
+ * itself rather than trusting the child's exit code alone. `G11_HARNESS_EVENT`
+ * / `G11_HARNESS_SUMMARY` lines are emitted by g11HarnessSetup.
+ */
+function parseHarness(stdout: string): {
+    expectedConnectionLossEvents: unknown[];
+    unexpectedErrorCount: number | null;
+    summaryPresent: boolean;
+} {
+    const plain = stripAnsi(stdout);
+    const summaryMatch = /G11_HARNESS_SUMMARY (\{[\s\S]*?\})\s*(?:\n|$)/.exec(plain);
+    if (summaryMatch?.[1]) {
+        try {
+            const parsed = JSON.parse(summaryMatch[1]) as {
+                events?: unknown[];
+                unexpectedErrors?: number;
+            };
+            const events = (parsed.events ?? []) as Array<{ classification?: string }>;
+            return {
+                expectedConnectionLossEvents: events.filter(
+                    (e) => e.classification === "EXPECTED_CONNECTION_LOSS"
+                ),
+                unexpectedErrorCount: parsed.unexpectedErrors ?? null,
+                summaryPresent: true
+            };
+        } catch {
+            // fall through to per-event reconstruction
+        }
+    }
+    // The summary prints once at the end; if the run died before it, rebuild from
+    // the per-event lines, which are emitted as they happen.
+    const events: unknown[] = [];
+    let unexpected = 0;
+    for (const m of plain.matchAll(/G11_HARNESS_EVENT (\{.*?\})\s*(?:\n|$)/g)) {
+        try {
+            const e = JSON.parse(m[1]!) as { classification?: string };
+            if (e.classification === "EXPECTED_CONNECTION_LOSS") events.push(e);
+            else unexpected += 1;
+        } catch {
+            /* ignore malformed line */
+        }
+    }
+    return {
+        expectedConnectionLossEvents: events,
+        unexpectedErrorCount: events.length || unexpected ? unexpected : null,
+        summaryPresent: false
+    };
+}
+
 function summarise(stdout: string, stderr: string): Record<string, unknown> {
-    const both = `${stdout}\n${stderr}`;
+    const both = stripAnsi(`${stdout}\n${stderr}`);
+    const harness = parseHarness(stdout);
     return {
         testsLine: /^\s*Tests\s+(.+)$/m.exec(both)?.[1]?.trim() ?? null,
         testFilesLine: /^\s*Test Files\s+(.+)$/m.exec(both)?.[1]?.trim() ?? null,
         durationLine: /^\s*Duration\s+(.+)$/m.exec(both)?.[1]?.trim() ?? null,
+        unhandledErrorsReported: /Vitest caught (\d+) unhandled error/.exec(both)?.[1] ?? "0",
         testIdsObserved: [...new Set([...both.matchAll(/G11-T\d{2}/g)].map((m) => m[0]))].sort(),
         observationsMarkerPresent: both.includes("G11_OBSERVATIONS"),
+        harnessSummaryPresent: harness.summaryPresent,
+        expectedConnectionLossCount: harness.expectedConnectionLossEvents.length,
+        unexpectedErrorCount: harness.unexpectedErrorCount,
         note: "Raw stdout/stderr and exit_code are authoritative. This summary indexes them and adjudicates nothing."
     };
 }
@@ -183,7 +252,6 @@ function summarise(stdout: string, stderr: string): Record<string, unknown> {
 async function startBattery(runId: string): Promise<void> {
     activeRunId = runId;
     const started = Date.now();
-    await store.markRunning(runId);
 
     const child = spawn(
         process.execPath,
@@ -191,6 +259,11 @@ async function startBattery(runId: string): Promise<void> {
             "node_modules/vitest/vitest.mjs",
             "run",
             BATTERY,
+            // QCP2A-R02-D02. Qualification-only harness containment for the
+            // connection terminations T11 deliberately causes. It adds error
+            // listeners; it does not touch the battery, its assertions, or T11's
+            // target population. See src/qualification/g11HarnessSetup.ts.
+            "--setupFiles=src/qualification/g11HarnessSetup.ts",
             "--testTimeout=300000",
             "--hookTimeout=200000",
             "--no-file-parallelism",
@@ -202,6 +275,8 @@ async function startBattery(runId: string): Promise<void> {
             timeout: 900_000
         }
     );
+
+    await store.markRunning(runId, child.pid ?? null);
 
     let stdout = "";
     let stderr = "";
@@ -282,7 +357,10 @@ async function startBattery(runId: string): Promise<void> {
                         stdout,
                         stderr,
                         terminationReason: signal ? `child terminated by signal ${signal}` : null,
-                        summary: summarise(stdout, stderr)
+                        summary: summarise(stdout, stderr),
+                        signal: signal ?? null,
+                        expectedConnectionLossEvents: parseHarness(stdout).expectedConnectionLossEvents,
+                        unexpectedErrorCount: parseHarness(stdout).unexpectedErrorCount
                     })
                 )
                 .finally(() => {
