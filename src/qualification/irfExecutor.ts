@@ -15,11 +15,12 @@
 // timestamps, process identity — never a summary or a verdict.
 
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
-import { execFile } from "node:child_process";
+import { spawn } from "node:child_process";
 import { randomUUID, createHash, timingSafeEqual } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { Client, type Pool, type PoolClient, type FieldDef } from "pg";
 import { createPool } from "../db/pool";
+import { G11RunStore, describeError, isConnectionLoss } from "./g11RunStore";
 
 const PORT = Number(process.env["PORT"] ?? 8080);
 const TOKEN = process.env["IRF_BRIDGE_TOKEN"] ?? "";
@@ -27,21 +28,52 @@ const CANDIDATE = process.env["CANDIDATE_URL"] ?? "http://scp-command-runtime.ra
 const BATTERY = "tests/runtime/g11Topology.integration.test.ts";
 
 const pool = createPool();
+const store = new G11RunStore();
+
+/**
+ * QCP2A-R01 — this process's own identity.
+ *
+ * RAILWAY_REPLICA_ID survives a process restart within the same replica, so it
+ * cannot distinguish "this process" from "the process that died". A per-boot
+ * UUID can, and that distinction is what restart reconciliation is built on:
+ * a run owned by a different boot id is by definition orphaned.
+ */
+const BOOT_ID = randomUUID();
+const PROCESS_IDENTITY = `${process.env["RAILWAY_REPLICA_ID"] ?? "local"}:${BOOT_ID}`;
+
+/** The run currently executing, so pool errors can be attributed to it. */
+let activeRunId: string | null = null;
+
+/**
+ * QCP2A-R01-A — safe pool error handling.
+ *
+ * The pinned battery's G11-T11 terminates every other backend on this database,
+ * which includes this bridge's idle pooled connections. node-pg surfaces that as
+ * an 'error' event on the pool; with no listener, Node treats it as an unhandled
+ * error event and kills the process. That is precisely what made the previous
+ * bridge NONCONFORMANT.
+ *
+ * Containment is not suppression. An expected destructive-test effect is
+ * recorded against the active run and execution continues. Anything else is
+ * recorded as UNEXPECTED, attached to the run's error_json, and left visible for
+ * IRF to adjudicate — it may legitimately fail the run. Nothing here converts a
+ * pool error into success.
+ */
+pool.on("error", (err: Error) => {
+    const expected = isConnectionLoss(err) && activeRunId !== null;
+    // eslint-disable-next-line no-console
+    console.log(
+        expected ? "POOL_ERROR_EXPECTED" : "POOL_ERROR_UNEXPECTED",
+        JSON.stringify({ runId: activeRunId, ...describeError(err) })
+    );
+    void store.recordPoolError(activeRunId, err, expected);
+});
 
 /** Long-lived IRF-controlled sessions. Real connections, held open until IRF says otherwise. */
 const sessions = new Map<string, Client>();
 
-interface BatteryRun {
-    state: "RUNNING" | "COMPLETE";
-    startedAt: string;
-    finishedAt?: string;
-    battery: { path: string; sha256: string; bytes: number };
-    identityBefore: Record<string, unknown>;
-    identityAfter?: Record<string, unknown>;
-    result?: Record<string, unknown>;
-}
-/** Raw run output, retained for IRF retrieval. */
-const runs = new Map<string, BatteryRun>();
+/** Last transport-level error seen on a session, so a killed session reports why. */
+const lastSessionError = new Map<string, Record<string, unknown>>();
 
 function authorised(req: IncomingMessage): boolean {
     if (!TOKEN) return false;
@@ -107,12 +139,158 @@ function bridgeIdentity(): Record<string, unknown> {
         railwayServiceName: process.env["RAILWAY_SERVICE_NAME"] ?? null,
         railwayEnvironmentName: process.env["RAILWAY_ENVIRONMENT_NAME"] ?? null,
         railwayReplicaId: process.env["RAILWAY_REPLICA_ID"] ?? null,
+        // Per-boot identity. The replica id survives a restart, so it cannot show
+        // IRF that the process changed; this can, and restart survival is exactly
+        // what A10 has to be able to test.
+        bridgeProcessIdentity: PROCESS_IDENTITY,
+        bridgeBootId: BOOT_ID,
+        bridgeProcessStartedAt: new Date(Date.now() - Math.round(process.uptime() * 1000)).toISOString(),
         nodeVersion: process.version,
         dbHost: process.env["PGHOST"] ?? null,
         dbPort: process.env["PGPORT"] ?? null,
         candidateUrl: CANDIDATE,
         observedAt: new Date().toISOString()
     };
+}
+
+/**
+ * A convenience index over the raw output. It deliberately adjudicates nothing:
+ * R01 §19 and §22 are explicit that EXE evidence establishes repair readiness
+ * only, and that reading 12/12 as sufficient is exactly the mistake to avoid.
+ * `stdout_raw`, `stderr_raw` and `exit_code` remain the authoritative record.
+ */
+function summarise(stdout: string, stderr: string): Record<string, unknown> {
+    const both = `${stdout}\n${stderr}`;
+    return {
+        testsLine: /^\s*Tests\s+(.+)$/m.exec(both)?.[1]?.trim() ?? null,
+        testFilesLine: /^\s*Test Files\s+(.+)$/m.exec(both)?.[1]?.trim() ?? null,
+        durationLine: /^\s*Duration\s+(.+)$/m.exec(both)?.[1]?.trim() ?? null,
+        testIdsObserved: [...new Set([...both.matchAll(/G11-T\d{2}/g)].map((m) => m[0]))].sort(),
+        observationsMarkerPresent: both.includes("G11_OBSERVATIONS"),
+        note: "Raw stdout/stderr and exit_code are authoritative. This summary indexes them and adjudicates nothing."
+    };
+}
+
+/**
+ * Runs the unchanged pinned battery in a child process, persisting evidence as
+ * it goes.
+ *
+ * The child boundary already existed and is preserved: the battery can terminate
+ * backends, fail, or be signalled without requiring this process to die. What is
+ * new is that output is checkpointed to durable storage while the suite runs, so
+ * a crash at any point still leaves the evidence produced up to that point.
+ */
+async function startBattery(runId: string): Promise<void> {
+    activeRunId = runId;
+    const started = Date.now();
+    await store.markRunning(runId);
+
+    const child = spawn(
+        process.execPath,
+        [
+            "node_modules/vitest/vitest.mjs",
+            "run",
+            BATTERY,
+            "--testTimeout=300000",
+            "--hookTimeout=200000",
+            "--no-file-parallelism",
+            "--reporter=basic"
+        ],
+        {
+            cwd: process.cwd(),
+            env: { ...process.env, RUN_INTEGRATION: "1" },
+            timeout: 900_000
+        }
+    );
+
+    let stdout = "";
+    let stderr = "";
+    let pendingOut = "";
+    let pendingErr = "";
+    let seq = 0;
+    let flushing = false;
+
+    const flush = async (): Promise<void> => {
+        if (flushing) return;
+        flushing = true;
+        try {
+            if (pendingOut) {
+                const c = pendingOut;
+                pendingOut = "";
+                seq += 1;
+                await store.appendChunk(runId, "stdout", seq, c);
+            }
+            if (pendingErr) {
+                const c = pendingErr;
+                pendingErr = "";
+                seq += 1;
+                await store.appendChunk(runId, "stderr", seq, c);
+            }
+        } finally {
+            flushing = false;
+        }
+    };
+
+    child.stdout?.on("data", (d: Buffer) => {
+        const s = d.toString("utf8");
+        stdout += s;
+        pendingOut += s;
+    });
+    child.stderr?.on("data", (d: Buffer) => {
+        const s = d.toString("utf8");
+        stderr += s;
+        pendingErr += s;
+    });
+
+    // Durable checkpoints while the battery is still running (R01 §10.3).
+    const ticker = setInterval(() => void flush(), 400);
+
+    await new Promise<void>((resolve) => {
+        child.on("error", (err: Error) => {
+            clearInterval(ticker);
+            void flush()
+                .then(() =>
+                    store.completeRun(runId, {
+                        state: "FAILED",
+                        exitCode: null,
+                        durationMs: Date.now() - started,
+                        stdout,
+                        stderr,
+                        terminationReason: "child process could not be executed",
+                        summary: summarise(stdout, stderr),
+                        error: err
+                    })
+                )
+                .finally(() => {
+                    activeRunId = null;
+                    resolve();
+                });
+        });
+
+        child.on("close", (code: number | null, signal: NodeJS.Signals | null) => {
+            clearInterval(ticker);
+            void flush()
+                .then(() =>
+                    store.completeRun(runId, {
+                        // COMPLETED means the runner ran to completion, NOT that the
+                        // battery passed. R01 §20: a non-zero exit is preserved
+                        // exactly as observed and never coerced to zero. Whether the
+                        // run is trustworthy is IRF's call, not the bridge's.
+                        state: "COMPLETED",
+                        exitCode: code,
+                        durationMs: Date.now() - started,
+                        stdout,
+                        stderr,
+                        terminationReason: signal ? `child terminated by signal ${signal}` : null,
+                        summary: summarise(stdout, stderr)
+                    })
+                )
+                .finally(() => {
+                    activeRunId = null;
+                    resolve();
+                });
+        });
+    });
 }
 
 async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
@@ -181,8 +359,18 @@ async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> 
             user: process.env["PGUSER"],
             password: process.env["PGPASSWORD"]
         });
-        await client.connect();
         const id = randomUUID();
+        // QCP2A-R01-A, session scope. G11-T11 terminates every other backend on
+        // this database, which includes IRF's own held sessions. An unhandled
+        // 'error' on a pg Client is fatal to the process exactly as it is on a
+        // Pool, so the same containment applies: record it against the session,
+        // keep it observable through /session/{id}/query, do not die.
+        client.on("error", (err: Error) => {
+            lastSessionError.set(id, describeError(err));
+            // eslint-disable-next-line no-console
+            console.log("SESSION_CLIENT_ERROR", JSON.stringify({ sessionId: id, ...describeError(err) }));
+        });
+        await client.connect();
         sessions.set(id, client);
         const pid = await runQuery(client, `SELECT pg_backend_pid() AS backend_pid`, []);
         return json(res, 200, { sessionId: id, backend: pid, openSessions: sessions.size });
@@ -191,17 +379,27 @@ async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> 
     if (p.startsWith("/session/") && req.method === "POST") {
         const [, , id, action] = p.split("/");
         const client = sessions.get(id ?? "");
-        if (!client) return json(res, 404, { error: "no such session", sessionId: id });
+        if (!client)
+            return json(res, 404, {
+                error: "no such session",
+                sessionId: id,
+                // If the session died because the battery terminated its backend,
+                // say so rather than leaving IRF to guess.
+                lastSessionError: lastSessionError.get(id ?? "") ?? null
+            });
 
         if (action === "query") {
             const body = await readBody(req);
             const sql = String(body["sql"] ?? "");
             if (!sql) return json(res, 422, { error: "sql required" });
-            return json(res, 200, await runQuery(client, sql, (body["params"] as unknown[]) ?? []));
+            const out = await runQuery(client, sql, (body["params"] as unknown[]) ?? []);
+            const transportError = lastSessionError.get(id ?? "");
+            return json(res, 200, transportError ? { ...out, transportError } : out);
         }
         if (action === "close") {
             await client.end().catch(() => undefined);
             sessions.delete(id!);
+            lastSessionError.delete(id!);
             return json(res, 200, { closed: id, openSessions: sessions.size });
         }
         if (action === "destroy") {
@@ -222,68 +420,70 @@ async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> 
     // starts a run, gets a runId, and retrieves raw stdout/stderr/exit
     // independently, however long it takes and whatever the battery does.
     if (p === "/g11/runs" && req.method === "GET") {
-        return json(res, 200, {
-            runs: [...runs.entries()].map(([id, r]) => ({ id, state: r.state, startedAt: r.startedAt }))
-        });
+        return json(res, 200, { runs: await store.listRuns() });
     }
     if (p.startsWith("/g11/") && req.method === "GET") {
         const id = p.split("/")[2] ?? "";
-        const r = runs.get(id);
+        // Durable store, not process memory. A restart no longer erases a run.
+        const r = await store.getRun(id);
         if (!r) return json(res, 404, { error: "no such run", runId: id });
         return json(res, 200, { runId: id, ...r });
     }
     if (p === "/g11" && req.method === "POST") {
         const buf = readFileSync(BATTERY);
-        const identityBefore = bridgeIdentity();
-        const started = Date.now();
         const runId = randomUUID();
-        runs.set(runId, {
-            state: "RUNNING",
-            startedAt: new Date().toISOString(),
-            battery: {
-                path: BATTERY,
-                sha256: createHash("sha256").update(buf).digest("hex"),
-                bytes: buf.length
-            },
-            identityBefore
+        const sha256 = createHash("sha256").update(buf).digest("hex");
+        const testCount = (buf.toString("utf8").match(/^\s*(?:it|test)\(/gm) ?? []).length;
+
+        let candidateIdentity: unknown = null;
+        try {
+            const r = await fetch(`${CANDIDATE}/identity`, { signal: AbortSignal.timeout(10_000) });
+            candidateIdentity = await r.json();
+        } catch (e) {
+            candidateIdentity = { error: String(e) };
+        }
+        const dbIdentity = await runQuery(
+            pool,
+            `SELECT version() AS version, current_database() AS database,
+                    host(inet_server_addr()) AS server_addr, inet_server_port() AS server_port`,
+            []
+        );
+
+        // Durable BEFORE the battery is launched (R01 §10.1). If this process
+        // dies one statement from here, the run still exists and IRF can still
+        // retrieve it — which is the entire point of the repair.
+        await store.createRun({
+            runId,
+            batteryPath: BATTERY,
+            batterySha256: sha256,
+            batteryBytes: buf.length,
+            batteryTestCount: testCount,
+            bridgeDeploymentId: process.env["RAILWAY_DEPLOYMENT_ID"] ?? null,
+            bridgeProcessIdentity: PROCESS_IDENTITY,
+            candidateDeploymentId:
+                (candidateIdentity as { railwayDeploymentId?: string } | null)?.railwayDeploymentId ?? null,
+            candidateRuntimeIdentity: candidateIdentity,
+            databaseIdentity: dbIdentity
         });
-        void new Promise<Record<string, unknown>>((resolve) => {
-            execFile(
-                process.execPath,
-                [
-                    "node_modules/vitest/vitest.mjs",
-                    "run",
-                    BATTERY,
-                    "--testTimeout=300000",
-                    "--hookTimeout=200000",
-                    "--no-file-parallelism",
-                    "--reporter=basic"
-                ],
-                {
-                    cwd: process.cwd(),
-                    env: { ...process.env, RUN_INTEGRATION: "1" },
-                    maxBuffer: 32 * 1024 * 1024,
-                    timeout: 600_000
-                },
-                (err, stdout, stderr) => {
-                    resolve({
-                        exitCode: (err as { code?: number } | null)?.code ?? 0,
-                        stdout,
-                        stderr,
-                        durationMs: Date.now() - started
-                    });
-                }
-            );
-        }).then((out) => {
-            const existing = runs.get(runId);
-            if (existing) {
-                existing.state = "COMPLETE";
-                existing.finishedAt = new Date().toISOString();
-                existing.identityAfter = bridgeIdentity();
-                existing.result = out;
-            }
+        await store.appendEvent(runId, "IDENTITY_BEFORE", bridgeIdentity());
+
+        void startBattery(runId).catch((e: unknown) => {
+            // A failure to even start the battery is itself run evidence, and an
+            // unhandled rejection here would reintroduce the crash this repair
+            // exists to remove.
+            activeRunId = null;
+            void store.completeRun(runId, {
+                state: "FAILED",
+                exitCode: null,
+                durationMs: 0,
+                stdout: "",
+                stderr: "",
+                terminationReason: "battery launch failed",
+                summary: null,
+                error: e
+            });
         });
-        return json(res, 202, { runId, state: "RUNNING", retrieveAt: `/g11/${runId}` });
+        return json(res, 202, { runId, state: "CREATED", retrieveAt: `/g11/${runId}` });
     }
 
     // ---- 6.5 remote failure injection against the candidate ---------------
@@ -314,9 +514,37 @@ async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> 
     json(res, 404, { error: "NOT_FOUND", path: p });
 }
 
+/**
+ * R01 §12 — restart recovery.
+ *
+ * Schema first, then reconcile. Any run still marked CREATED/RUNNING under a
+ * previous boot id cannot be running now, because the process that owned it no
+ * longer exists. It is marked INTERRUPTED — never COMPLETED, never PASS — with
+ * the previous owner and the reason recorded.
+ */
+async function bootstrap(): Promise<void> {
+    await store.initSchema();
+    const reconciled = await store.reconcileOnStartup(PROCESS_IDENTITY);
+    // eslint-disable-next-line no-console
+    console.log(
+        "IRF QCP2A bridge bootstrap",
+        JSON.stringify({
+            processIdentity: PROCESS_IDENTITY,
+            reconciledInterruptedRuns: reconciled.length,
+            reconciled
+        })
+    );
+}
+
 createServer((req, res) => {
     handle(req, res).catch((e: Error) => json(res, 500, { error: e.message, stack: e.stack }));
 }).listen(PORT, "0.0.0.0", () => {
     // eslint-disable-next-line no-console
-    console.log("IRF QCP2A bridge listening", JSON.stringify(bridgeIdentity()));
+    console.log("IRF QCP2A bridge listening", JSON.stringify({ ...bridgeIdentity(), processIdentity: PROCESS_IDENTITY }));
+    void bootstrap().catch((e: unknown) => {
+        // Serve regardless: /healthz and the durable read paths must stay
+        // available so a storage problem is diagnosable rather than invisible.
+        // eslint-disable-next-line no-console
+        console.log("IRF QCP2A bridge bootstrap FAILED", JSON.stringify(describeError(e)));
+    });
 });
