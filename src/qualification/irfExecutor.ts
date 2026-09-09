@@ -31,6 +31,18 @@ const pool = createPool();
 /** Long-lived IRF-controlled sessions. Real connections, held open until IRF says otherwise. */
 const sessions = new Map<string, Client>();
 
+interface BatteryRun {
+    state: "RUNNING" | "COMPLETE";
+    startedAt: string;
+    finishedAt?: string;
+    battery: { path: string; sha256: string; bytes: number };
+    identityBefore: Record<string, unknown>;
+    identityAfter?: Record<string, unknown>;
+    result?: Record<string, unknown>;
+}
+/** Raw run output, retained for IRF retrieval. */
+const runs = new Map<string, BatteryRun>();
+
 function authorised(req: IncomingMessage): boolean {
     if (!TOKEN) return false;
     const given = (req.headers["authorization"] ?? "").toString().replace(/^Bearer\s+/i, "");
@@ -204,11 +216,38 @@ async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> 
     }
 
     // ---- 6.4 pinned G11 execution ----------------------------------------
+    // Asynchronous by design. The battery deliberately terminates database
+    // backends, which can take a synchronous HTTP request down with it — and a
+    // proof that cannot deliver its own result is not much of a proof. IRF
+    // starts a run, gets a runId, and retrieves raw stdout/stderr/exit
+    // independently, however long it takes and whatever the battery does.
+    if (p === "/g11/runs" && req.method === "GET") {
+        return json(res, 200, {
+            runs: [...runs.entries()].map(([id, r]) => ({ id, state: r.state, startedAt: r.startedAt }))
+        });
+    }
+    if (p.startsWith("/g11/") && req.method === "GET") {
+        const id = p.split("/")[2] ?? "";
+        const r = runs.get(id);
+        if (!r) return json(res, 404, { error: "no such run", runId: id });
+        return json(res, 200, { runId: id, ...r });
+    }
     if (p === "/g11" && req.method === "POST") {
         const buf = readFileSync(BATTERY);
         const identityBefore = bridgeIdentity();
         const started = Date.now();
-        const out = await new Promise<Record<string, unknown>>((resolve) => {
+        const runId = randomUUID();
+        runs.set(runId, {
+            state: "RUNNING",
+            startedAt: new Date().toISOString(),
+            battery: {
+                path: BATTERY,
+                sha256: createHash("sha256").update(buf).digest("hex"),
+                bytes: buf.length
+            },
+            identityBefore
+        });
+        void new Promise<Record<string, unknown>>((resolve) => {
             execFile(
                 process.execPath,
                 [
@@ -235,17 +274,16 @@ async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> 
                     });
                 }
             );
+        }).then((out) => {
+            const existing = runs.get(runId);
+            if (existing) {
+                existing.state = "COMPLETE";
+                existing.finishedAt = new Date().toISOString();
+                existing.identityAfter = bridgeIdentity();
+                existing.result = out;
+            }
         });
-        return json(res, 200, {
-            battery: {
-                path: BATTERY,
-                sha256: createHash("sha256").update(buf).digest("hex"),
-                bytes: buf.length
-            },
-            identityBefore,
-            identityAfter: bridgeIdentity(),
-            result: out
-        });
+        return json(res, 202, { runId, state: "RUNNING", retrieveAt: `/g11/${runId}` });
     }
 
     // ---- 6.5 remote failure injection against the candidate ---------------
