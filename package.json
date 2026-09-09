@@ -19,7 +19,8 @@
     "db:test:reset": "npm run db:test:drop && npm run db:test:setup && npm run db:test:schema && npm run db:test:migrate",
     "db:test:drop": "psql -h /tmp -p 5432 -U jwairepo -d postgres -v ON_ERROR_STOP=1 -c 'DROP DATABASE IF EXISTS freshline_msos_test;'",
     "start": "node dist/src/qualification/runtime.js",
-    "q01b:g11": "vitest run tests/runtime/g11Topology --testTimeout=300000 --hookTimeout=200000 --no-file-parallelism"
+    "q01b:g11": "vitest run tests/runtime/g11Topology --testTimeout=300000 --hookTimeout=200000 --no-file-parallelism",
+    "start:irf-bridge": "node dist/src/qualification/irfExecutor.js"
   },
   "dependencies": {
     "luxon": "^3.4.4",
