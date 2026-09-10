@@ -19,6 +19,7 @@
 
 import strings from "../localization/strings.json";
 import type { CustomerProjection } from "../customer/projection";
+import { FRESHLINE_PROFILE, type BrandExperienceProfile } from "./brandProfile";
 
 type LocalizedEntry = Record<string, string>;
 
@@ -75,10 +76,16 @@ export interface PageOptions {
     locale: string;
     /** Where the form posts. Supplied by the host, not assumed here. */
     ingressPath: string;
+    /**
+     * C5 — expression only. Omitted means Freshline, which is what every existing
+     * caller gets, which is why extracting this seam changed no rendered byte.
+     */
+    brandExperienceProfile?: BrandExperienceProfile;
 }
 
 export function renderCustomerPage(options: PageOptions): string {
     const p = options.projection;
+    const profile = options.brandExperienceProfile ?? FRESHLINE_PROFILE;
     const locale = p.market.supportedLocales.includes(options.locale)
         ? options.locale
         : p.market.localeDefault;
@@ -146,26 +153,26 @@ export function renderCustomerPage(options: PageOptions): string {
 <style>
 :root{
   --black:${black};--teal:${teal};--teal-hover:${tealHover};--silver:${silver};--white:${white};
-  --heading:${escapeHtml(p.brand.headingFont)},"Oswald",system-ui,sans-serif;
-  --body:${escapeHtml(p.brand.bodyFont)},"DM Sans",system-ui,-apple-system,sans-serif;
+  --heading:${escapeHtml(p.brand.headingFont)},${profile.headingFallback};
+  --body:${escapeHtml(p.brand.bodyFont)},${profile.bodyFallback};
 }
 *{box-sizing:border-box}
 html,body{margin:0;padding:0}
 body{background:var(--black);color:var(--white);font-family:var(--body);
-  font-size:16px;line-height:1.5;-webkit-text-size-adjust:100%}
-.wrap{width:100%;max-width:560px;margin:0 auto;padding:20px 16px 96px}
+  font-size:${profile.baseFontSize};line-height:${profile.baseLineHeight};-webkit-text-size-adjust:100%}
+.wrap{width:100%;max-width:${profile.contentMaxWidth};margin:0 auto;padding:${profile.contentPadding}}
 header{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:4px}
-h1{font-family:var(--heading);font-weight:700;letter-spacing:.02em;font-size:1.6rem;margin:0}
+h1{font-family:var(--heading);font-weight:${profile.h1Weight};letter-spacing:${profile.h1LetterSpacing};font-size:${profile.h1Size};margin:0}
 h1 .mkt{color:var(--teal)}
 .tagline{color:var(--silver);opacity:.8;font-size:.95rem;margin:2px 0 4px}
 .hours{color:var(--silver);opacity:.65;font-size:.85rem;margin:0 0 20px}
 .lang{color:var(--silver);opacity:.55;text-decoration:none;font-size:.8rem;
   padding:6px 8px;min-width:44px;min-height:44px;display:inline-flex;align-items:center;justify-content:center}
 .lang-on{color:var(--teal);opacity:1;font-weight:600}
-h2{font-family:var(--heading);font-weight:700;font-size:1rem;text-transform:uppercase;
-  letter-spacing:.08em;color:var(--silver);margin:28px 0 10px}
+h2{font-family:var(--heading);font-weight:700;font-size:1rem;text-transform:${profile.h2Transform};
+  letter-spacing:${profile.h2LetterSpacing};color:var(--silver);margin:${profile.sectionMargin}}
 h2 .opt{text-transform:none;letter-spacing:0;font-weight:400;opacity:.55;font-size:.8rem}
-.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chips{display:flex;flex-wrap:wrap;gap:${profile.chipGap}}
 .chip{flex:1 1 100%}
 /* Visually hidden but still focusable and still in the accessibility tree.
    display:none or opacity:0 with zero size would take the control away from

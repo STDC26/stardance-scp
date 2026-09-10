@@ -27,6 +27,8 @@
 
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 
+import { routeLabsRequest } from "./shell/labsRouter";
+
 /** The canonical Experience Lab path namespace. An HTTP path, not a directory. */
 export const LABS_PREFIX = "/labs";
 
@@ -87,7 +89,27 @@ export function handleLabsRequest(req: IncomingMessage, res: ServerResponse): vo
         return;
     }
 
-    sendJson(res, 404, { error: "NOT_FOUND" });
+    // Tenant routes are delegated to the Experience Lab router, which is async
+    // because a LIVE tenant has to acquire a governed runtime first. Health stays
+    // above this line deliberately: liveness must not depend on the database.
+    void routeLabsRequest(req, res)
+        .then((handled) => {
+            if (!handled) {
+                sendJson(res, 404, { error: "NOT_FOUND" });
+            }
+        })
+        .catch((error: unknown) => {
+            // A thrown router is a defect, not a customer-facing state. Report it
+            // as one rather than rendering a half-built page.
+            if (!res.headersSent) {
+                sendJson(res, 500, {
+                    error: "EXPERIENCE_LAB_FAILED",
+                    message: error instanceof Error ? error.message : "unknown failure"
+                });
+            } else {
+                res.end();
+            }
+        });
 }
 
 /** Creates the Lab server without binding it. Callers decide when to listen. */

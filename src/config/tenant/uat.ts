@@ -30,6 +30,25 @@ export const FRESHLINE_UAT_LINEAGE: UatLineage = {
 };
 
 /**
+ * Athena's governed lineage (SCP-SHELL-04A-EXE-01A §3.2).
+ *
+ * Its bundle is derived from the same accepted source as Freshline's, and that is
+ * deliberate: Athena's catalogue, prices and availability live in the FIXTURE
+ * provider, and writing them into `core_tenant_configuration` would put fixture
+ * content into a canonical truth table — an explicit hard stop. So what this
+ * lineage establishes is that the tenant EXISTS and is governed; what Athena
+ * *sells* is fixture-sourced and says FIXTURE in its provenance.
+ *
+ * Bali is an Experience Lab deployment convenience, not a claim that Athena's
+ * commercial or geographic model is Bali-specific.
+ */
+export const ATHENA_UAT_LINEAGE: UatLineage = {
+    tenantId: "athena-uat",
+    marketId: "bali",
+    environment: "uat"
+};
+
+/**
  * Derives a UAT bundle from an accepted source bundle.
  *
  * Only deployment identity is replaced: `tenant.id`, `tenant.market` and

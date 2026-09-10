@@ -79,7 +79,13 @@ describe("LAB-INFRA-01 T2 — unknown route", () => {
     it("does not treat the /labs namespace as a wildcard", async () => {
         // `/labs` is a path namespace the router may discriminate (spec §10),
         // not a catch-all that answers for routes nobody has built yet.
-        for (const path of ["/labs", "/labs/", "/labs/freshline", "/labs/athena"]) {
+        //
+        // UPDATED BY SCP-SHELL-04A-EXE-01A (C2/C5): `/labs/freshline` and
+        // `/labs/athena` were in this list and are now mounted tenant routes, so
+        // asserting they 404 would assert the absence of the very thing this gate
+        // built. They are covered by tests/shell/labsRoutes.test.ts instead. An
+        // unmounted tenant must still 404, which is what keeps this test honest.
+        for (const path of ["/labs", "/labs/", "/labs/nobody", "/labs/freshline-typo"]) {
             const response = await fetch(`${origin}${path}`);
             expect(response.status).toBe(404);
         }

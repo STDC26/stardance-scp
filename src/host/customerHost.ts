@@ -205,7 +205,7 @@ export async function startCustomerHost(input: CustomerHostInput): Promise<HostS
     }
 
     const server = createServer((request, response) => {
-        handle(input.pool, runtime, request, response).catch(() => {
+        handleCustomerRequest(input.pool, runtime, request, response).catch(() => {
             json(response, 500, { error: "INTERNAL", message: "the request could not be completed" });
         });
     });
@@ -234,7 +234,11 @@ export async function startCustomerHost(input: CustomerHostInput): Promise<HostS
     };
 }
 
-async function handle(
+// C2 (SCP-SHELL-04A-EXE-01A) — exported so the Experience Lab router can serve
+// the SAME handler this host binds. Renamed and exported; the body is untouched.
+// Every dependency was already a parameter, so there is no server-scope closure
+// to unpick and no behavioural difference between the two call paths.
+export async function handleCustomerRequest(
     pool: Pool,
     runtime: RuntimeContext,
     request: IncomingMessage,

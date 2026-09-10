@@ -118,7 +118,7 @@ export async function startOwnerHost(input: OwnerHostInput): Promise<OwnerHostOu
     const runtime = started.runtime;
 
     const server = createServer((request, response) => {
-        handle(input.pool, runtime, request, response).catch(() => {
+        handleOwnerRequest(input.pool, runtime, request, response).catch(() => {
             json(response, 500, { error: "INTERNAL", message: "the request could not be completed" });
         });
     });
@@ -219,7 +219,11 @@ function respond(response: ServerResponse, outcome: OwnerCommandOutcome, correla
     });
 }
 
-async function handle(
+// C2 (SCP-SHELL-04A-EXE-01A) — exported so the Experience Lab router can serve
+// the SAME handler this host binds. Renamed and exported; the body is untouched.
+// Every dependency was already a parameter, so there is no server-scope closure
+// to unpick and no behavioural difference between the two call paths.
+export async function handleOwnerRequest(
     pool: Pool,
     runtime: RuntimeContext,
     request: IncomingMessage,
