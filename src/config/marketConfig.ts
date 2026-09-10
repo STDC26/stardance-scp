@@ -160,14 +160,72 @@ export function loadMarketConfig(marketId: MarketId): MarketConfig {
 }
 
 /**
+ * The market a local development process gets when it says nothing at all.
+ *
+ * SCP-DEPLOY-ID-01: this is a developer convenience and NOT a deployment
+ * contract. A governed runtime must pass `requireExplicit`, which turns the
+ * absence of the signal into a refusal — because a missing market selection is
+ * not the same statement as selecting the default market.
+ */
+export const DEVELOPMENT_DEFAULT_MARKET: MarketId = "bali";
+
+export type MarketSelectionRefusalCode = "MISSING_ACTIVE_MARKET" | "UNKNOWN_MARKET";
+
+/**
+ * Carries a machine-readable reason so a caller can distinguish "you did not
+ * choose" from "you chose something that does not exist". A bare Error forces
+ * callers to match on message text, which is how refusal semantics rot.
+ */
+export class MarketSelectionError extends Error {
+    public readonly code: MarketSelectionRefusalCode;
+
+    public constructor(code: MarketSelectionRefusalCode, message: string) {
+        super(message);
+        this.name = "MarketSelectionError";
+        this.code = code;
+    }
+}
+
+export interface MarketSelectionOptions {
+    /**
+     * Require the market-selection signal to be present. Governed deployments —
+     * UAT, staging, production — set this. Absence then refuses instead of
+     * resolving through the development default.
+     */
+    requireExplicit?: boolean;
+}
+
+/**
  * Resolves the active market from the ACTIVE_MARKET environment variable.
  * This is the single sanctioned entry point core services should use — see
- * AGENTS.md.
+ * AGENTS.md — and the only place in the codebase that interprets that signal.
+ *
+ * SCP-DEPLOY-ID-01 strengthened this function rather than adding a second
+ * reader beside it. There is still exactly one registry, one parse, and one
+ * validation; `requireExplicit` only changes what the ABSENCE of the signal
+ * means, which is the whole ambiguity being removed.
  */
-export function getActiveMarketConfig(env: NodeJS.ProcessEnv = process.env): MarketConfig {
-    const marketId = (env["ACTIVE_MARKET"] ?? "bali") as MarketId;
+export function getActiveMarketConfig(
+    env: NodeJS.ProcessEnv = process.env,
+    options: MarketSelectionOptions = {}
+): MarketConfig {
+    const signal = env["ACTIVE_MARKET"];
+
+    if (signal === undefined) {
+        if (options.requireExplicit === true) {
+            throw new MarketSelectionError(
+                "MISSING_ACTIVE_MARKET",
+                "ACTIVE_MARKET is not set. A governed deployment must select its market explicitly; " +
+                    "the absence of a market-selection signal is not a selection of the default market."
+            );
+        }
+        return loadMarketConfig(DEVELOPMENT_DEFAULT_MARKET);
+    }
+
+    const marketId = signal as MarketId;
     if (!Object.prototype.hasOwnProperty.call(REGISTRY, marketId)) {
-        throw new Error(
+        throw new MarketSelectionError(
+            "UNKNOWN_MARKET",
             `ACTIVE_MARKET="${marketId}" is not a recognized market id. Known markets: ${Object.keys(REGISTRY).join(", ")}`
         );
     }
