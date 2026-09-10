@@ -110,6 +110,12 @@ export function startLabServer(port: number = Number(process.env["PORT"] ?? 3000
 // Bind only when executed directly. When this module is imported — by the
 // Vercel adapter in `api/index.ts`, or by a test — importing it must not
 // occupy a port.
-if (require.main === module) {
+//
+// The `typeof require` guard is not defensive padding: the platform bundles this
+// module for a serverless invocation, and a bare `require.main` reference throws
+// at module load in a bundle where `require` is not in scope. The failure mode
+// that would produce is a function that cannot even be imported, which is
+// exactly what the first deployment attempt was trying to escape.
+if (typeof require !== "undefined" && require.main === module) {
     startLabServer();
 }
