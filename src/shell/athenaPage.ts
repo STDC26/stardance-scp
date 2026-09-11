@@ -1,30 +1,43 @@
-// C5 — the Athena demand surface.
+// C5 / UAT-R1 — the Athena demand surface.
 //
-// This renderer's input is a `ProjectionEnvelope<DemandPayload>` — the same
-// contract the Freshline LIVE provider produces. That is the 1:MANY proof: two
-// materially different surfaces, one Shell-facing contract, and no tenant branch
-// anywhere in Core. Everything that differs between Athena and Freshline is on
-// one of three lines: the Brand Experience Profile, the projection payload, or
-// the composition below.
+// Its input is a `ProjectionEnvelope<DemandPayload>` — the same contract the
+// Freshline LIVE provider produces. That is the 1:MANY proof: two materially
+// different surfaces, one Shell-facing contract, and no tenant branch anywhere in
+// Core. Everything that differs is on one of three lines: the Brand Experience
+// Profile, the projection payload, or the composition below.
 //
-// It also renders semantics rather than optimism, which is where most demo UIs
-// quietly lie:
+// UAT-R1 made it functional rather than merely rendered. Every control is a plain
+// link carrying bounded state in the query string, so the journey works with no
+// client JavaScript, no session store and no canonical write — and stays a pure
+// function that tests can drive without a browser.
 //
-//   RECOMMENDATION ≠ OFFER      a recommendation is labelled and priced as a
-//                               suggestion, never as an authorised price.
-//   AVAILABLE ≠ ELIGIBLE        a window with `eligible: false` is shown as
-//                               present-but-unavailable-to-you, not hidden and
-//                               not silently bookable.
-//   ELIGIBILITY ≠ COMMITMENT    the commit control's enabled state comes from
-//                               `authority.canCommit`, and when it is off the
-//                               reason is printed rather than the button removed.
+// It renders semantics rather than optimism, which is where most demo UIs lie:
 //
-// And it says out loud, on the page, when it is looking at fixture data. An
-// Experience Lab surface that cannot be told apart from production truth is worse
-// than no surface at all.
+//   RECOMMENDATION ≠ OFFER      a suggestion is labelled as one and cannot change
+//                               the payable amount — `deriveJourney` ignores it.
+//   AVAILABLE ≠ ELIGIBLE        an ineligible window stays visible and selectable,
+//                               and then blocks commitment with a stated reason.
+//   ELIGIBILITY ≠ COMMITMENT    the commit control follows the derived posture, and
+//                               when it is off the reason is printed, not hidden.
+//   FIXTURE ≠ LIVE              the banner says FIXTURE and the result says
+//                               "nothing has been reserved".
+//
+// Language changes words only. Every label comes from the shared dictionary, every
+// amount from `formatMoney(minorUnits, currency, locale)`, and the amount itself is
+// never recomputed — so EN and FR differ in presentation and in nothing else.
 
 import { escapeHtml } from "../host/page";
 import type { BrandExperienceProfile } from "../host/brandProfile";
+import { translate } from "../localization/translate";
+import { formatMoney } from "./money";
+import {
+    deriveJourney,
+    fixtureResultReference,
+    journeyHref,
+    parseSelection,
+    type AthenaJourney,
+    type AthenaSelection
+} from "./athenaInteraction";
 import type { DemandPayload, ProjectionEnvelope } from "./contract";
 
 export interface AthenaPageOptions {
@@ -32,73 +45,238 @@ export interface AthenaPageOptions {
     profile: BrandExperienceProfile;
     /** Where the provenance inspector lives, linked from the source banner. */
     inspectorPath: string;
+    /** This surface's own path, for building control links. */
+    basePath: string;
+    /** The request's query string, which carries the bounded UAT state. */
+    params: URLSearchParams;
+    /** Locales this surface offers. Index 0 is primary. */
+    locales: readonly string[];
 }
 
-function money(display: string): string {
-    return escapeHtml(display);
+/** Dictionary shorthand, bound to the active locale. */
+function makeT(locale: string): (key: string) => string {
+    return (key) => translate("athena", key, locale);
 }
 
-/**
- * The source banner. Deliberately not subtle and deliberately not dismissible:
- * FIXTURE ≠ LIVE has to survive someone screenshotting the page.
- */
-function sourceBanner(envelope: ProjectionEnvelope<DemandPayload>, inspectorPath: string): string {
+const POSTURE_KEY: Readonly<Record<string, string>> = {
+    CAN_COMMIT: "posture_can_commit",
+    CAN_REQUEST: "posture_can_request",
+    NOT_ELIGIBLE: "posture_not_eligible",
+    NO_VALID_CAPACITY: "posture_no_capacity",
+    REQUIRES_AUTHORITY: "posture_not_determined",
+    NOT_DETERMINED: "posture_not_determined"
+};
+
+function sourceBanner(
+    envelope: ProjectionEnvelope<DemandPayload>,
+    inspectorPath: string,
+    t: (key: string) => string
+): string {
     const p = envelope.provenance;
     const isFixture = p.sourceType === "FIXTURE";
     const version = p.fixtureVersion ?? p.sourceVersion ?? "unversioned";
     return `<aside class="src ${isFixture ? "src-fixture" : "src-live"}">
       <span class="src-dot"></span>
-      <span><strong>${escapeHtml(p.sourceType)}</strong> · ${escapeHtml(p.provider)} · ${escapeHtml(version)}</span>
+      <span><strong>${escapeHtml(p.sourceType)}</strong> · ${escapeHtml(p.provider)} · ${escapeHtml(version)} — ${escapeHtml(t("fixture_note"))}</span>
       <a class="src-link" href="${escapeHtml(inspectorPath)}">inspect projection</a>
     </aside>`;
 }
 
-function serviceCard(service: DemandPayload["services"][number]): string {
-    return `<article class="svc${service.featured === true ? " svc-featured" : ""}">
+function languageSwitch(
+    options: AthenaPageOptions,
+    selection: AthenaSelection,
+    t: (key: string) => string
+): string {
+    const links = options.locales
+        .map((code) => {
+            // Only `lang` changes. Every other selection rides through untouched,
+            // which is what makes UAT-R1-05 structural rather than aspirational.
+            const href = journeyHref(options.basePath, selection, { locale: code });
+            const on = code === selection.locale;
+            return `<a class="lang${on ? " lang-on" : ""}" href="${escapeHtml(href)}" hreflang="${escapeHtml(code)}">${escapeHtml(code.toUpperCase())}</a>`;
+        })
+        .join("");
+    return `<nav class="langs" aria-label="${escapeHtml(t("lang_switch"))}">
+      <span class="lang-label">${escapeHtml(t("lang_switch"))}</span>${links}
+    </nav>`;
+}
+
+function serviceCard(
+    service: DemandPayload["services"][number],
+    options: AthenaPageOptions,
+    journey: AthenaJourney,
+    t: (key: string) => string
+): string {
+    const chosen = journey.service?.code === service.code;
+    const href = journeyHref(options.basePath, journey.selection, {
+        service: chosen ? null : service.code,
+        submitted: null
+    });
+    const price = formatMoney(
+        service.price.minorUnits,
+        service.price.currency,
+        journey.selection.locale
+    );
+
+    return `<article class="svc${service.featured === true ? " svc-featured" : ""}${chosen ? " svc-chosen" : ""}">
       <div class="svc-head">
         <h3>${escapeHtml(service.name)}</h3>
-        <p class="svc-price">${money(service.price.display)}</p>
+        <p class="svc-price">${escapeHtml(price)}</p>
       </div>
       ${service.description === undefined ? "" : `<p class="svc-copy">${escapeHtml(service.description)}</p>`}
-      <p class="svc-meta">${service.durationMinutes} minutes · ${escapeHtml(service.code)}</p>
+      <p class="svc-meta">${service.durationMinutes} ${escapeHtml(t("svc_minutes"))} · ${escapeHtml(service.code)}</p>
+      <a class="btn${chosen ? " btn-on" : ""}" href="${escapeHtml(href)}">${escapeHtml(chosen ? t("svc_chosen") : t("svc_choose"))}</a>
     </article>`;
 }
 
-function offerRow(offer: DemandPayload["offers"][number]): string {
+function offerRow(
+    offer: DemandPayload["offers"][number],
+    options: AthenaPageOptions,
+    journey: AthenaJourney,
+    t: (key: string) => string
+): string {
     const isRecommendation = offer.kind === "RECOMMENDATION";
-    return `<li class="offer ${isRecommendation ? "offer-rec" : "offer-authorised"}">
-      <span class="offer-kind">${isRecommendation ? "Suggestion" : "Offer"}</span>
+    const applied = journey.offer?.code === offer.code;
+    const href = journeyHref(options.basePath, journey.selection, {
+        offer: applied ? null : offer.code,
+        submitted: null
+    });
+    const price = formatMoney(offer.price.minorUnits, offer.price.currency, journey.selection.locale);
+
+    return `<li class="offer ${isRecommendation ? "offer-rec" : "offer-authorised"}${applied ? " offer-on" : ""}">
+      <span class="offer-kind">${escapeHtml(isRecommendation ? t("offer_kind_sugg") : t("offer_kind_offer"))}</span>
       <span class="offer-label">${escapeHtml(offer.label)}</span>
-      <span class="offer-price">${money(offer.price.display)}</span>
+      <span class="offer-price">${escapeHtml(price)}</span>
       ${offer.description === undefined ? "" : `<span class="offer-copy">${escapeHtml(offer.description)}</span>`}
-      ${
-          isRecommendation
-              ? `<span class="offer-caveat">A recommendation, not an authorised price for you.</span>`
-              : ""
-      }
+      ${isRecommendation ? `<span class="offer-caveat">${escapeHtml(t("offer_caveat"))}</span>` : ""}
+      <a class="offer-act" href="${escapeHtml(href)}">${escapeHtml(applied ? t("offer_applied") : t("offer_apply"))}</a>
     </li>`;
 }
 
-function availabilityRow(window: DemandPayload["availability"][number]): string {
-    // Three distinct renderings for three distinct facts, including "we do not
-    // model eligibility", which is not the same as "not eligible".
+function availabilityRow(
+    window: DemandPayload["availability"][number],
+    index: number,
+    options: AthenaPageOptions,
+    journey: AthenaJourney,
+    t: (key: string) => string
+): string {
     const status =
         window.eligible === undefined
-            ? `<span class="av-unknown">eligibility not determined</span>`
+            ? `<span class="av-unknown">${escapeHtml(t("av_not_determined"))}</span>`
             : window.eligible
-              ? `<span class="av-ok">available to you</span>`
-              : `<span class="av-blocked">available, not eligible for you</span>`;
+              ? `<span class="av-ok">${escapeHtml(t("av_eligible"))}</span>`
+              : `<span class="av-blocked">${escapeHtml(t("av_not_eligible"))}</span>`;
 
-    return `<li class="av${window.eligible === false ? " av-off" : ""}">
+    const selected = journey.selection.windowIndex === index;
+    // Selectable even when ineligible: hiding it would misrepresent supply, and the
+    // block belongs at commitment where the reason can be stated.
+    const href = journeyHref(options.basePath, journey.selection, {
+        window: selected ? null : String(index),
+        submitted: null
+    });
+
+    return `<li class="av${window.eligible === false ? " av-off" : ""}${selected ? " av-on" : ""}">
       <span class="av-label">${escapeHtml(window.label)}</span>
       ${status}
+      <a class="av-act" href="${escapeHtml(href)}">${escapeHtml(selected ? t("av_selected") : t("av_select"))}</a>
     </li>`;
+}
+
+function reviewRow(label: string, value: string, extraClass = ""): string {
+    return `<div class="rev-row ${extraClass}"><dt>${escapeHtml(label)}</dt><dd>${escapeHtml(value)}</dd></div>`;
+}
+
+function reviewSection(
+    options: AthenaPageOptions,
+    journey: AthenaJourney,
+    envelope: ProjectionEnvelope<DemandPayload>,
+    t: (key: string) => string
+): string {
+    const locale = journey.selection.locale;
+    const none = t("review_none");
+    const payable =
+        journey.payable === null
+            ? none
+            : formatMoney(journey.payable.minorUnits, journey.payable.currency, locale);
+
+    const eligibility =
+        journey.window === null
+            ? none
+            : journey.window.eligible === undefined
+              ? t("av_not_determined")
+              : journey.window.eligible
+                ? t("av_eligible")
+                : t("av_not_eligible");
+
+    const postureKey = POSTURE_KEY[journey.posture] ?? "posture_not_determined";
+
+    const requestHref = journeyHref(options.basePath, journey.selection, { submitted: "1" });
+    const commitHref = journeyHref(options.basePath, journey.selection, { submitted: "1" });
+    const restartHref = journeyHref(options.basePath, journey.selection, {
+        service: null,
+        offer: null,
+        window: null,
+        submitted: null
+    });
+
+    if (journey.selection.submitted && journey.reviewReady && journey.canCommit) {
+        // Deterministic fixture result. Explicitly simulated, with no canonical id.
+        return `<section class="review result">
+          <h2>${escapeHtml(t("section_review"))}</h2>
+          <p class="posture">${escapeHtml(t("result_title"))}</p>
+          <p class="posture-reason">${escapeHtml(t("result_body"))}</p>
+          <dl class="rev">
+            ${reviewRow(t("review_service"), journey.service?.name ?? none)}
+            ${reviewRow(t("review_price"), payable)}
+            ${reviewRow(t("review_time"), journey.window?.label ?? none)}
+            ${reviewRow(t("review_currency"), journey.payable?.currency ?? none)}
+            ${reviewRow(t("result_reference"), fixtureResultReference(journey))}
+            ${reviewRow(t("review_source"), `${envelope.provenance.sourceType} · ${envelope.provenance.fixtureVersion ?? ""}`)}
+          </dl>
+          <div class="actions">
+            <a class="btn" href="${escapeHtml(restartHref)}">${escapeHtml(t("action_restart"))}</a>
+          </div>
+        </section>`;
+    }
+
+    return `<section class="review">
+      <h2>${escapeHtml(t("section_review"))}</h2>
+      <p class="posture">${escapeHtml(t(postureKey))}</p>
+      <dl class="rev">
+        ${reviewRow(t("review_service"), journey.service?.name ?? none)}
+        ${reviewRow(t("review_price"), payable)}
+        ${reviewRow(t("review_offer"), journey.offerApplied ? journey.offer?.label ?? none : none)}
+        ${reviewRow(t("review_time"), journey.window?.label ?? none)}
+        ${reviewRow(t("review_eligibility"), eligibility)}
+        ${reviewRow(t("review_currency"), journey.payable?.currency ?? none)}
+        ${reviewRow(t("review_source"), `${envelope.provenance.sourceType} · ${envelope.provenance.fixtureVersion ?? ""}`)}
+      </dl>
+      <div class="actions">
+        ${
+            journey.reviewReady
+                ? `<a class="btn" href="${escapeHtml(requestHref)}">${escapeHtml(t("action_request"))}</a>`
+                : `<span class="btn btn-off" aria-disabled="true">${escapeHtml(t("action_request"))}</span>`
+        }
+        ${
+            journey.canCommit
+                ? `<a class="btn btn-primary" href="${escapeHtml(commitHref)}">${escapeHtml(t("action_commit"))}</a>`
+                : `<span class="btn btn-primary btn-off" aria-disabled="true">${escapeHtml(t("action_commit"))}</span>`
+        }
+        ${
+            journey.blockedReasonKey === null
+                ? ""
+                : `<p class="action-reason">${escapeHtml(t(journey.blockedReasonKey))}</p>`
+        }
+      </div>
+    </section>`;
 }
 
 export function renderAthenaPage(options: AthenaPageOptions): string {
     const { envelope, profile, inspectorPath } = options;
     const d = envelope.payload;
-    const c = d.committable;
+    const selection = parseSelection(options.params, options.locales);
+    const journey = deriveJourney(selection, d);
+    const t = makeT(selection.locale);
 
     const ink = d.brand.colors["ink"] ?? "#1A1714";
     const parchment = d.brand.colors["parchment"] ?? "#F7F3EC";
@@ -106,11 +284,8 @@ export function renderAthenaPage(options: AthenaPageOptions): string {
     const sage = d.brand.colors["sage"] ?? "#5A6B5D";
     const line = d.brand.colors["line"] ?? "#DED5C7";
 
-    const commit = envelope.actions.find((action) => action.kind === "COMMIT");
-    const request = envelope.actions.find((action) => action.kind === "REQUEST");
-
     return `<!doctype html>
-<html lang="en">
+<html lang="${escapeHtml(selection.locale)}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
@@ -129,31 +304,45 @@ body{background:var(--parchment);color:var(--ink);font-family:var(--body);
   font-size:${profile.baseFontSize};line-height:${profile.baseLineHeight};-webkit-text-size-adjust:100%}
 .wrap{width:100%;max-width:${profile.contentMaxWidth};margin:0 auto;padding:${profile.contentPadding}}
 
-/* Editorial masthead — a wide measure and a large serif display face, where
-   Freshline uses a 560px column and condensed uppercase. */
 .masthead{border-bottom:1px solid var(--line);padding-bottom:36px}
 h1{font-family:var(--heading);font-weight:${profile.h1Weight};font-size:${profile.h1Size};
   letter-spacing:${profile.h1LetterSpacing};line-height:1.05;margin:0 0 18px}
 .tagline{font-family:var(--heading);font-size:1.35rem;font-style:italic;color:var(--sage);margin:0 0 10px}
 .locale{font-size:.8rem;letter-spacing:.16em;text-transform:uppercase;color:var(--bronze);margin:0}
-
 h2{font-family:var(--body);font-size:.75rem;font-weight:600;
   text-transform:${profile.h2Transform};letter-spacing:${profile.h2LetterSpacing};
   color:var(--bronze);margin:${profile.sectionMargin}}
 
-/* Merchandising as cards with generous gutters, not a dense chip list. */
+.langs{display:flex;align-items:center;gap:6px;margin:0 0 20px}
+.lang-label{font-size:.7rem;letter-spacing:.14em;text-transform:uppercase;color:var(--sage);margin-right:6px}
+.lang{display:inline-flex;align-items:center;justify-content:center;min-width:44px;min-height:44px;
+  padding:0 12px;text-decoration:none;color:var(--sage);border:1px solid var(--line);border-radius:var(--radius);
+  font-size:.78rem;letter-spacing:.12em}
+.lang-on{background:var(--ink);color:var(--parchment);border-color:var(--ink)}
+
+.btn{display:inline-flex;align-items:center;justify-content:center;min-height:48px;padding:0 26px;
+  border:1px solid var(--ink);border-radius:var(--radius);text-decoration:none;color:var(--ink);
+  font-size:.85rem;letter-spacing:.08em;text-transform:uppercase;background:transparent}
+.btn-primary{background:var(--ink);color:var(--parchment)}
+.btn-on{background:var(--sage);color:#fff;border-color:var(--sage)}
+.btn-off{opacity:.38;cursor:not-allowed}
+
 .svcs{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:${profile.chipGap}}
-.svc{border:1px solid var(--line);border-radius:var(--radius);padding:28px;background:rgba(255,255,255,.55)}
+.svc{border:1px solid var(--line);border-radius:var(--radius);padding:28px;background:rgba(255,255,255,.55);
+  display:flex;flex-direction:column;gap:0}
 .svc-featured{border-color:var(--bronze);background:#fff}
+.svc-chosen{outline:2px solid var(--sage);outline-offset:-2px}
 .svc-head{display:flex;justify-content:space-between;align-items:baseline;gap:16px}
 .svc h3{font-family:var(--heading);font-weight:400;font-size:1.5rem;margin:0}
 .svc-price{font-family:var(--heading);font-size:1.25rem;color:var(--bronze);margin:0;white-space:nowrap}
 .svc-copy{margin:14px 0 0;color:#4A443D}
-.svc-meta{margin:18px 0 0;font-size:.75rem;letter-spacing:.1em;text-transform:uppercase;color:var(--sage)}
+.svc-meta{margin:18px 0 20px;font-size:.75rem;letter-spacing:.1em;text-transform:uppercase;color:var(--sage)}
+.svc .btn{align-self:flex-start;margin-top:auto}
 
 .offers{list-style:none;margin:0;padding:0;display:grid;gap:16px}
 .offer{display:grid;grid-template-columns:auto 1fr auto;gap:14px;align-items:baseline;
   padding:18px 0;border-bottom:1px solid var(--line)}
+.offer-on{background:rgba(140,106,67,.07)}
 .offer-kind{font-size:.7rem;letter-spacing:.14em;text-transform:uppercase;padding:4px 10px;border-radius:999px}
 .offer-authorised .offer-kind{background:var(--bronze);color:#fff}
 .offer-rec .offer-kind{background:transparent;border:1px dashed var(--sage);color:var(--sage)}
@@ -161,34 +350,35 @@ h2{font-family:var(--body);font-size:.75rem;font-weight:600;
 .offer-price{font-family:var(--heading);color:var(--bronze)}
 .offer-copy,.offer-caveat{grid-column:1 / -1;font-size:.9rem;color:#4A443D;margin:0}
 .offer-caveat{color:var(--sage);font-style:italic}
+.offer-act{grid-column:1 / -1;justify-self:start;font-size:.78rem;letter-spacing:.1em;
+  text-transform:uppercase;color:var(--ink);min-height:44px;display:inline-flex;align-items:center}
 
 .avs{list-style:none;margin:0;padding:0;display:grid;gap:2px}
 .av{display:flex;justify-content:space-between;align-items:center;gap:20px;
-  padding:18px 20px;background:rgba(255,255,255,.55);border:1px solid var(--line)}
-.av-off{background:transparent;opacity:.72}
+  padding:16px 20px;background:rgba(255,255,255,.55);border:1px solid var(--line)}
+.av-off{background:transparent;opacity:.78}
+.av-on{outline:2px solid var(--sage);outline-offset:-2px}
 .av-label{font-family:var(--heading);font-size:1.15rem}
 .av-ok{font-size:.78rem;letter-spacing:.1em;text-transform:uppercase;color:var(--sage)}
 .av-blocked{font-size:.78rem;letter-spacing:.1em;text-transform:uppercase;color:#9A5B3C}
 .av-unknown{font-size:.78rem;letter-spacing:.1em;text-transform:uppercase;color:var(--bronze)}
+.av-act{font-size:.78rem;letter-spacing:.1em;text-transform:uppercase;color:var(--ink);
+  min-height:44px;display:inline-flex;align-items:center}
 
 .review{margin-top:${profile.sectionMargin};border:1px solid var(--line);
   border-radius:var(--radius);padding:32px;background:#fff}
+.result{border-color:var(--sage)}
 .posture{font-family:var(--heading);font-size:1.6rem;margin:0 0 12px}
 .posture-reason{margin:0 0 22px;color:#4A443D}
-.resolved{list-style:none;margin:0 0 26px;padding:0;display:flex;flex-wrap:wrap;gap:10px}
-.resolved li{font-size:.72rem;letter-spacing:.1em;text-transform:uppercase;
-  padding:6px 12px;border:1px solid var(--line);border-radius:999px}
-.resolved .yes{border-color:var(--sage);color:var(--sage)}
-.resolved .no{border-color:#C9BCA8;color:#8A7B66}
+.rev{margin:0 0 26px;padding:0}
+.rev-row{display:flex;justify-content:space-between;gap:20px;padding:12px 0;border-bottom:1px solid var(--line)}
+.rev-row dt{font-size:.72rem;letter-spacing:.12em;text-transform:uppercase;color:var(--sage);margin:0}
+.rev-row dd{margin:0;font-family:var(--heading);font-size:1.05rem;text-align:right}
 .actions{display:flex;flex-wrap:wrap;gap:14px;align-items:center}
-button{font-family:var(--body);font-size:.95rem;letter-spacing:.06em;text-transform:uppercase;
-  min-height:52px;padding:0 30px;border-radius:var(--radius);cursor:pointer;border:1px solid var(--ink)}
-button.primary{background:var(--ink);color:var(--parchment)}
-button[disabled]{cursor:not-allowed;opacity:.4}
-.action-reason{flex:1 1 260px;font-size:.85rem;color:var(--sage);font-style:italic;margin:0}
+.action-reason{flex:1 1 260px;font-size:.85rem;color:#9A5B3C;font-style:italic;margin:0}
 
-.src{display:flex;flex-wrap:wrap;align-items:center;gap:12px;margin:0 0 34px;
-  padding:12px 16px;font-size:.78rem;letter-spacing:.08em;text-transform:uppercase;border-radius:var(--radius)}
+.src{display:flex;flex-wrap:wrap;align-items:center;gap:12px;margin:0 0 28px;
+  padding:12px 16px;font-size:.78rem;letter-spacing:.06em;text-transform:uppercase;border-radius:var(--radius)}
 .src-fixture{background:#F3E6D2;color:#7A4E17;border:1px solid #DFC79C}
 .src-live{background:#E4EDE5;color:#2F5133;border:1px solid #BBD2BE}
 .src-dot{width:8px;height:8px;border-radius:50%;background:currentColor}
@@ -202,19 +392,22 @@ button[disabled]{cursor:not-allowed;opacity:.4}
   .svc{padding:22px}
   .offer{grid-template-columns:auto 1fr;row-gap:6px}
   .offer-price{grid-column:2;justify-self:start}
-  .av{flex-direction:column;align-items:flex-start;gap:6px}
+  .av{flex-wrap:wrap;gap:8px}
+  .rev-row{flex-direction:column;gap:4px}
+  .rev-row dd{text-align:left}
 }
 @media (max-width:400px){
   .wrap{padding:24px 16px 88px}
   h1{font-size:1.95rem}
   .tagline{font-size:1.1rem}
-  button{width:100%}
+  .btn{width:100%}
 }
 </style>
 </head>
 <body>
 <div class="wrap">
-${sourceBanner(envelope, inspectorPath)}
+${sourceBanner(envelope, inspectorPath, t)}
+${languageSwitch(options, selection, t)}
 
 <header class="masthead">
   <p class="state">${escapeHtml(envelope.state.label)}</p>
@@ -223,47 +416,28 @@ ${sourceBanner(envelope, inspectorPath)}
   <p class="locale">${escapeHtml(d.brand.marketDescriptor)} · ${escapeHtml(d.market.operatingHours.open)}–${escapeHtml(d.market.operatingHours.close)}</p>
 </header>
 
-<h2>The treatments</h2>
+<h2>${escapeHtml(t("section_services"))}</h2>
 <div class="svcs">
-${d.services.map(serviceCard).join("\n")}
+${d.services.map((service) => serviceCard(service, options, journey, t)).join("\n")}
 </div>
 
 ${
     d.offers.length === 0
-        ? `<h2>Offers</h2><p class="svc-copy">No offers are published for this surface.</p>`
-        : `<h2>Offers &amp; suggestions</h2><ul class="offers">
-${d.offers.map(offerRow).join("\n")}
+        ? ""
+        : `<h2>${escapeHtml(t("section_offers"))}</h2><ul class="offers">
+${d.offers.map((offer) => offerRow(offer, options, journey, t)).join("\n")}
 </ul>`
 }
 
 ${
     d.availability.length === 0
-        ? `<h2>Availability</h2><p class="svc-copy">Availability is not published by this source. Nothing here should be read as a bookable time.</p>`
-        : `<h2>When</h2><ul class="avs">
-${d.availability.map(availabilityRow).join("\n")}
+        ? ""
+        : `<h2>${escapeHtml(t("section_when"))}</h2><ul class="avs">
+${d.availability.map((window, index) => availabilityRow(window, index, options, journey, t)).join("\n")}
 </ul>`
 }
 
-<section class="review">
-  <h2>Review</h2>
-  <p class="posture">${escapeHtml(c.posture.replace(/_/g, " ").toLowerCase())}</p>
-  <p class="posture-reason">${escapeHtml(c.reason)}</p>
-  <ul class="resolved">
-    <li class="${c.resolved.service ? "yes" : "no"}">service ${c.resolved.service ? "resolved" : "unresolved"}</li>
-    <li class="${c.resolved.price ? "yes" : "no"}">price ${c.resolved.price ? "resolved" : "unresolved"}</li>
-    <li class="${c.resolved.eligibility ? "yes" : "no"}">eligibility ${c.resolved.eligibility ? "resolved" : "unresolved"}</li>
-    <li class="${c.resolved.capacity ? "yes" : "no"}">capacity ${c.resolved.capacity ? "resolved" : "unresolved"}</li>
-  </ul>
-  <div class="actions">
-    <button type="button" ${request?.enabled === true ? "" : "disabled"}>${escapeHtml(request?.label ?? "Request")}</button>
-    <button type="button" class="primary" ${commit?.enabled === true ? "" : "disabled"}>${escapeHtml(commit?.label ?? "Reserve")}</button>
-    ${
-        commit?.enabled === true || commit?.reason === undefined
-            ? ""
-            : `<p class="action-reason">${escapeHtml(commit.reason)}</p>`
-    }
-  </div>
-</section>
+${reviewSection(options, journey, envelope, t)}
 </div>
 </body>
 </html>`;

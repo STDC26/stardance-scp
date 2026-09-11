@@ -258,6 +258,16 @@ export interface ProjectionRequest {
     actor: Actor;
     /** Correlation id from the transport, so provenance can be traced end to end. */
     correlationId?: string | null;
+    /**
+     * UAT-R1: the language the projection's own copy should be returned in.
+     *
+     * Localization belongs at the source, not in the renderer: a real tenant's
+     * catalogue is localized in its configuration, so a fixture standing in for one
+     * must be too. Only words change with this field — `minorUnits`, eligibility,
+     * availability and posture are identical across every locale, which is what the
+     * invariance tests assert.
+     */
+    locale?: string;
 }
 
 /**

@@ -20,22 +20,37 @@ import { resolveMount, stripMountPrefix, LAB_MOUNTS } from "../../src/shell/moun
 import {
     createFixtureProjectionProvider,
     FixtureNotFoundError,
-    ATHENA_FIXTURE_VERSION
+    ATHENA_FIXTURE_VERSION,
+    ATHENA_LOCALES,
+    ATHENA_CURRENCY
 } from "../../src/shell/fixtureProvider";
 import { attentionForStage } from "../../src/shell/liveProvider";
 import { inspect, renderInspector } from "../../src/shell/inspector";
 import { renderAthenaPage } from "../../src/shell/athenaPage";
+import { deriveJourney, journeyHref, parseSelection } from "../../src/shell/athenaInteraction";
+import { formatMoney } from "../../src/shell/money";
+import { customerProjectionFixture } from "../support/customerProjectionFixture";
 import { ATHENA_PROFILE, FRESHLINE_PROFILE } from "../../src/host/brandProfile";
 
 const provider = createFixtureProjectionProvider();
 const ANON = { actorId: null, role: "VISITOR" } as const;
 
-async function athenaDemand(): Promise<ProjectionEnvelope<DemandPayload>> {
-    return provider.demand({ tenant: "athena-uat", actor: ANON });
+async function athenaDemand(locale = "en"): Promise<ProjectionEnvelope<DemandPayload>> {
+    return provider.demand({ tenant: "athena-uat", actor: ANON, locale });
 }
 
-function athenaHtml(envelope: ProjectionEnvelope<DemandPayload>): string {
-    return renderAthenaPage({ envelope, profile: ATHENA_PROFILE, inspectorPath: "/labs/_inspect" });
+function athenaHtml(
+    envelope: ProjectionEnvelope<DemandPayload>,
+    query = ""
+): string {
+    return renderAthenaPage({
+        envelope,
+        profile: ATHENA_PROFILE,
+        inspectorPath: "/labs/_inspect",
+        basePath: "/labs/athena",
+        params: new URLSearchParams(query),
+        locales: ATHENA_LOCALES
+    });
 }
 
 // ---------------------------------------------------------------------------
@@ -270,53 +285,254 @@ describe("C8 semantic integrity", () => {
         expect(html).toContain("offer-rec");
         expect(html).toContain("offer-authorised");
         expect(html).toContain("A recommendation, not an authorised price for you.");
+        expect(html).toContain("offer-rec");
     });
 
-    it("NEGATIVE: refuses to enable commit when the source does not allow it", async () => {
-        // The required negative-state test. The Shell is handed an envelope whose
-        // authority says no, and must render a disabled control with the reason —
-        // not a hopeful button, and not a hidden one.
+    it("NEGATIVE: an ineligible window blocks commitment with a stated reason", async () => {
+        // The required negative-state test, and the heart of UAT-R1-02. Window index
+        // 2 is AVAILABLE but NOT ELIGIBLE. Selecting it must leave the surface
+        // honest: the option stays visible, the commit control is disabled, and the
+        // reason is printed rather than the button quietly disappearing.
         const envelope = await athenaDemand();
-        const downgraded: ProjectionEnvelope<DemandPayload> = {
-            ...envelope,
-            authority: { ...envelope.authority, canCommit: false },
-            actions: [
-                { id: "submit-demand", label: "Request this time", kind: "REQUEST", enabled: true },
-                {
-                    id: "commit",
-                    label: "Reserve",
-                    kind: "COMMIT",
-                    enabled: false,
-                    reason: "Capacity is not confirmed for this window."
-                }
-            ],
-            payload: {
-                ...envelope.payload,
-                committable: {
-                    posture: "NO_VALID_CAPACITY",
-                    reason: "No provider has accepted this window.",
-                    resolved: { service: true, price: true, eligibility: true, capacity: false }
-                }
+        const html = athenaHtml(envelope, "svc=ATH-SIGNATURE-RITUAL&slot=2");
+
+        expect(html).toContain("Not eligible");
+        expect(html).toContain(
+            "This time is available but you are not eligible for it, so it cannot be reserved."
+        );
+        // Disabled, not absent.
+        expect(html).toContain('aria-disabled="true"');
+        expect(html).not.toContain('class="btn btn-primary" href');
+    });
+
+    it("NEGATIVE: never prints a stronger posture than the selection supports", async () => {
+        const envelope = await athenaDemand();
+
+        // Nothing chosen: no posture claim beyond "not determined", and no request.
+        const empty = athenaHtml(envelope);
+        expect(empty).toContain("Not determined");
+        expect(empty).toContain("Choose a treatment first.");
+        expect(empty).not.toContain("Ready to reserve");
+
+        // Service but no time: request is honest, reserve is not yet.
+        const partial = athenaHtml(envelope, "svc=ATH-SIGNATURE-RITUAL");
+        expect(partial).toContain("Request only");
+        expect(partial).toContain("Select an eligible time first.");
+        expect(partial).not.toContain("Ready to reserve");
+
+        // Complete and eligible: only now may it say so.
+        const complete = athenaHtml(envelope, "svc=ATH-SIGNATURE-RITUAL&slot=0");
+        expect(complete).toContain("Ready to reserve");
+    });
+
+    it("NEGATIVE: a suggestion cannot become the payable amount", async () => {
+        // SUGGESTION ≠ AUTHORIZED PRICE. Applying the recommendation must leave the
+        // payable amount at the service price, not at the suggestion's €45.
+        const envelope = await athenaDemand();
+        const withRecommendation = deriveJourney(
+            parseSelection(
+                new URLSearchParams("svc=ATH-SIGNATURE-RITUAL&slot=0&offer=ATH-REC-PAIRING"),
+                ATHENA_LOCALES
+            ),
+            envelope.payload
+        );
+
+        expect(withRecommendation.offer?.kind).toBe("RECOMMENDATION");
+        expect(withRecommendation.offerApplied).toBe(false);
+        expect(withRecommendation.payable?.minorUnits).toBe(18_500);
+
+        // An authorised OFFER may change it.
+        const withOffer = deriveJourney(
+            parseSelection(
+                new URLSearchParams("svc=ATH-SIGNATURE-RITUAL&slot=0&offer=ATH-OFFER-RESIDENT"),
+                ATHENA_LOCALES
+            ),
+            envelope.payload
+        );
+        expect(withOffer.offerApplied).toBe(true);
+        expect(withOffer.payable?.minorUnits).toBe(14_800);
+    });
+
+    it("NEGATIVE: a fixture result is never presentable as a canonical commitment", async () => {
+        const envelope = await athenaDemand();
+        const html = athenaHtml(envelope, "svc=ATH-SIGNATURE-RITUAL&slot=0&done=1");
+
+        expect(html).toContain("Simulated reservation recorded");
+        expect(html).toContain(
+            "Nothing has been reserved, nothing has been charged, and no canonical record exists."
+        );
+        // The reference is unmistakably a fixture, not a UUID.
+        expect(html).toContain("FIXTURE-ATH-SIGNATURE-RITUAL-0-NO-OFFER");
+        expect(html).toContain('class="src src-fixture"');
+    });
+
+    it("does not let an unsubmitted journey show a result", async () => {
+        const envelope = await athenaDemand();
+        const html = athenaHtml(envelope, "svc=ATH-SIGNATURE-RITUAL&slot=0");
+        expect(html).not.toContain("Simulated reservation recorded");
+    });
+
+    it("refuses to show a result for an ineligible selection even when submitted", async () => {
+        const envelope = await athenaDemand();
+        const html = athenaHtml(envelope, "svc=ATH-SIGNATURE-RITUAL&slot=2&done=1");
+
+        // Submitting an ineligible selection must not manufacture a result.
+        expect(html).not.toContain("Simulated reservation recorded");
+        expect(html).toContain("Not eligible");
+    });
+});
+
+// ---------------------------------------------------------------------------
+// UAT-R1 — interaction, currency, localization
+// ---------------------------------------------------------------------------
+
+describe("UAT-R1 Athena interaction", () => {
+    it("completes the fixture journey end to end", async () => {
+        const envelope = await athenaDemand();
+
+        const steps = [
+            { query: "", expect: "Choose a treatment first." },
+            { query: "svc=ATH-SIGNATURE-RITUAL", expect: "Select an eligible time first." },
+            { query: "svc=ATH-SIGNATURE-RITUAL&slot=0", expect: "Ready to reserve" },
+            { query: "svc=ATH-SIGNATURE-RITUAL&slot=0&done=1", expect: "Simulated reservation recorded" }
+        ];
+
+        for (const step of steps) {
+            expect(athenaHtml(envelope, step.query), `step ${step.query}`).toContain(step.expect);
+        }
+    });
+
+    it("marks the chosen service and selected window in the markup", async () => {
+        const html = athenaHtml(await athenaDemand(), "svc=ATH-RESTORATIVE-DEEP&slot=1");
+        expect(html).toContain("svc-chosen");
+        expect(html).toContain("av-on");
+        expect(html).toContain("Chosen");
+        expect(html).toContain("Selected");
+    });
+
+    it("offers at least two eligible windows and one visible ineligible one", async () => {
+        const windows = (await athenaDemand()).payload.availability;
+        expect(windows.filter((w) => w.eligible === true).length).toBeGreaterThanOrEqual(2);
+        expect(windows.filter((w) => w.eligible === false).length).toBeGreaterThanOrEqual(1);
+    });
+
+    it("keeps the fixture result deterministic", async () => {
+        const envelope = await athenaDemand();
+        const a = athenaHtml(envelope, "svc=ATH-SIGNATURE-RITUAL&slot=0&done=1");
+        const b = athenaHtml(envelope, "svc=ATH-SIGNATURE-RITUAL&slot=0&done=1");
+        // generatedAt differs between projections, so compare the reference itself.
+        expect(a.includes("FIXTURE-ATH-SIGNATURE-RITUAL-0-NO-OFFER")).toBe(true);
+        expect(b.includes("FIXTURE-ATH-SIGNATURE-RITUAL-0-NO-OFFER")).toBe(true);
+    });
+});
+
+describe("UAT-R1 currency", () => {
+    it("presents Athena in EUR, never IDR, in both languages", async () => {
+        for (const locale of ATHENA_LOCALES) {
+            const envelope = await athenaDemand(locale);
+            expect(envelope.payload.market.currency).toBe(ATHENA_CURRENCY);
+            for (const service of envelope.payload.services) {
+                expect(service.price.currency).toBe("EUR");
             }
-        };
+            for (const offer of envelope.payload.offers) {
+                expect(offer.price.currency).toBe("EUR");
+            }
 
-        const html = athenaHtml(downgraded);
-
-        expect(html).toContain("disabled");
-        expect(html).toContain("Capacity is not confirmed for this window.");
-        expect(html).toContain("no valid capacity");
-        expect(html).toContain("capacity unresolved");
+            const html = athenaHtml(envelope, "svc=ATH-SIGNATURE-RITUAL&slot=0");
+            expect(html).not.toContain("IDR");
+            expect(html).not.toContain("Rp");
+            expect(html).toContain("EUR");
+        }
     });
 
-    it("NEGATIVE: never prints a stronger posture than the payload carries", async () => {
-        const envelope = await athenaDemand();
-        const html = athenaHtml(envelope);
+    it("formats EUR per locale while leaving the amount untouched", async () => {
+        // Intl separates the amount from € with a NARROW NO-BREAK SPACE (U+202F) in
+        // French, not an ordinary space. Normalising Unicode spaces keeps this test
+        // about the formatting decision rather than about an invisible codepoint.
+        const flat = (value: string): string => value.replace(/[\u00A0\u202F\u2009]/g, " ");
 
-        // The posture is rendered from the payload, so a page cannot claim
-        // CAN_COMMIT unless the payload said so.
-        expect(envelope.payload.committable.posture).toBe("CAN_COMMIT");
-        expect(html).toContain("can commit");
-        expect(html).not.toContain("confirmed booking");
+        expect(flat(formatMoney(18_500, "EUR", "en"))).toBe("€185.00");
+        expect(flat(formatMoney(18_500, "EUR", "fr"))).toBe("185,00 €");
+
+        // The amount is identical; only its presentation moved.
+        expect(formatMoney(18_500, "EUR", "en")).not.toBe(formatMoney(18_500, "EUR", "fr"));
+
+        expect(athenaHtml(await athenaDemand("en"), "lang=en")).toContain("€185.00");
+        expect(flat(athenaHtml(await athenaDemand("fr"), "lang=fr"))).toContain("185,00 €");
+    });
+
+    it("does not change Freshline's currency", () => {
+        // MARKET ≠ CURRENCY cuts both ways: Athena going EUR must not move Freshline.
+        expect(customerProjectionFixture().market.currency).toBe("IDR");
+        expect(customerProjectionFixture().catalogue.services[0]?.price.currency).toBe("IDR");
+    });
+});
+
+describe("UAT-R1 localization invariance", () => {
+    it("translates the journey into French", async () => {
+        const html = athenaHtml(await athenaDemand("fr"), "lang=fr&svc=ATH-SIGNATURE-RITUAL&slot=2");
+
+        expect(html).toContain("Récapitulatif");
+        expect(html).toContain("Les soins");
+        expect(html).toContain("disponible, mais non éligible pour vous");
+        expect(html).toContain("Non éligible");
+        expect(html).toContain('lang="fr"');
+    });
+
+    it("changes words without changing a single business fact", async () => {
+        const query = "svc=ATH-SIGNATURE-RITUAL&slot=2&offer=ATH-OFFER-RESIDENT";
+        const en = await athenaDemand("en");
+        const fr = await athenaDemand("fr");
+
+        const jEn = deriveJourney(parseSelection(new URLSearchParams(query), ATHENA_LOCALES), en.payload);
+        const jFr = deriveJourney(
+            parseSelection(new URLSearchParams(`${query}&lang=fr`), ATHENA_LOCALES),
+            fr.payload
+        );
+
+        // Price amount, selection, eligibility, availability shape, authority and
+        // posture must all be identical. Only the words differ.
+        expect(jFr.payable?.minorUnits).toBe(jEn.payable?.minorUnits);
+        expect(jFr.payable?.currency).toBe(jEn.payable?.currency);
+        expect(jFr.service?.code).toBe(jEn.service?.code);
+        expect(jFr.offer?.code).toBe(jEn.offer?.code);
+        expect(jFr.offerApplied).toBe(jEn.offerApplied);
+        expect(jFr.window?.eligible).toBe(jEn.window?.eligible);
+        expect(jFr.posture).toBe(jEn.posture);
+        expect(jFr.canCommit).toBe(jEn.canCommit);
+        expect(jFr.blockedReasonKey).toBe(jEn.blockedReasonKey);
+        expect(fr.payload.availability.length).toBe(en.payload.availability.length);
+        expect(fr.authority).toEqual(en.authority);
+        expect(fr.provenance.sourceType).toBe(en.provenance.sourceType);
+        expect(fr.provenance.fixtureVersion).toBe(en.provenance.fixtureVersion);
+        // Localized copy really did change, so the test above is not vacuous.
+        expect(jFr.service?.name).not.toBe(jEn.service?.name);
+    });
+
+    it("carries the whole selection through a language switch", async () => {
+        const selection = parseSelection(
+            new URLSearchParams("svc=ATH-SIGNATURE-RITUAL&slot=1&offer=ATH-OFFER-RESIDENT&done=1"),
+            ATHENA_LOCALES
+        );
+        const href = journeyHref("/labs/athena", selection, { locale: "fr" });
+
+        expect(href).toContain("lang=fr");
+        expect(href).toContain("svc=ATH-SIGNATURE-RITUAL");
+        expect(href).toContain("slot=1");
+        expect(href).toContain("offer=ATH-OFFER-RESIDENT");
+        expect(href).toContain("done=1");
+    });
+
+    it("falls back to the primary locale for an unsupported language", () => {
+        const selection = parseSelection(new URLSearchParams("lang=de"), ATHENA_LOCALES);
+        expect(selection.locale).toBe("en");
+    });
+
+    it("renders both language links, marking the active one", async () => {
+        const html = athenaHtml(await athenaDemand("fr"), "lang=fr&svc=ATH-SIGNATURE-RITUAL");
+        expect(html).toContain(">EN<");
+        expect(html).toContain(">FR<");
+        expect(html).toContain("lang-on");
     });
 });
 

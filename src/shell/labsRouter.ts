@@ -19,14 +19,20 @@ import { handleOwnerRequest } from "../host/ownerHost";
 import { handlePartnerRequest } from "../host/partnerHost";
 import { brandProfileFor, ATHENA_PROFILE } from "../host/brandProfile";
 import { renderAthenaPage } from "./athenaPage";
-import { createFixtureProjectionProvider, FixtureNotFoundError } from "./fixtureProvider";
+import {
+    createFixtureProjectionProvider,
+    fixtureLocales,
+    FixtureNotFoundError
+} from "./fixtureProvider";
+import { resolveLocale } from "../localization/translate";
 import { createLiveProjectionProvider } from "./liveProvider";
 import { inspect, renderInspector, type InspectionReport } from "./inspector";
 import { labsRuntime } from "./labsRuntime";
 import { resolveMount, stripMountPrefix } from "./mount";
-import type { Actor, ProjectionEnvelope, ProjectionProvider } from "./contract";
+import type { Actor, DemandPayload, ProjectionEnvelope, ProjectionProvider } from "./contract";
 
 export const LABS_INSPECTOR_PATH = "/labs/_inspect";
+export const ATHENA_DEMAND_PATH = "/labs/athena";
 
 const ANONYMOUS_VISITOR: Actor = { actorId: null, role: "VISITOR" };
 const INTERNAL_REVIEWER: Actor = { actorId: null, role: "UAT_REVIEWER" };
@@ -139,6 +145,7 @@ async function handleInspector(response: ServerResponse, correlationId: string):
 
 async function handleAthena(
     pathname: string,
+    params: URLSearchParams,
     response: ServerResponse,
     correlationId: string
 ): Promise<void> {
@@ -158,8 +165,17 @@ async function handleAthena(
             return;
         }
 
-        const envelope: ProjectionEnvelope<import("./contract").DemandPayload> =
-            await fixtureProvider.demand({ tenant, actor: ANONYMOUS_VISITOR, correlationId });
+        // UAT-R1: the locale and the bounded interaction state both ride in the
+        // query string, so the projection is fetched in the requested language and
+        // the renderer derives the journey from the same URL.
+        const locales = fixtureLocales(tenant);
+        const locale = resolveLocale(params.get("lang"), locales);
+        const envelope: ProjectionEnvelope<DemandPayload> = await fixtureProvider.demand({
+            tenant,
+            actor: ANONYMOUS_VISITOR,
+            correlationId,
+            locale
+        });
 
         sendHtml(
             response,
@@ -167,7 +183,10 @@ async function handleAthena(
             renderAthenaPage({
                 envelope,
                 profile: brandProfileFor(tenant) ?? ATHENA_PROFILE,
-                inspectorPath: LABS_INSPECTOR_PATH
+                inspectorPath: LABS_INSPECTOR_PATH,
+                basePath: ATHENA_DEMAND_PATH,
+                params,
+                locales
             })
         );
     } catch (error) {
@@ -204,7 +223,7 @@ export async function routeLabsRequest(
     }
 
     if (mount.handler === "SHELL") {
-        await handleAthena(pathname, response, correlationId);
+        await handleAthena(pathname, url.searchParams, response, correlationId);
         return true;
     }
 

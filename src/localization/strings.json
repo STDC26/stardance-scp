@@ -414,5 +414,171 @@
       "en": "Something went wrong on our side. Your details are still here — please try again.",
       "id": "Terjadi kesalahan di pihak kami. Detail Anda masih tersimpan — silakan coba lagi."
     }
+  },
+  "athena": {
+    "lang_switch": {
+      "en": "Language",
+      "fr": "Langue"
+    },
+    "section_services": {
+      "en": "The treatments",
+      "fr": "Les soins"
+    },
+    "section_offers": {
+      "en": "Offers & suggestions",
+      "fr": "Offres et suggestions"
+    },
+    "section_when": {
+      "en": "When",
+      "fr": "Quand"
+    },
+    "section_review": {
+      "en": "Review",
+      "fr": "Récapitulatif"
+    },
+    "svc_minutes": {
+      "en": "minutes",
+      "fr": "minutes"
+    },
+    "svc_choose": {
+      "en": "Choose",
+      "fr": "Choisir"
+    },
+    "svc_chosen": {
+      "en": "Chosen",
+      "fr": "Choisi"
+    },
+    "offer_kind_offer": {
+      "en": "Offer",
+      "fr": "Offre"
+    },
+    "offer_kind_sugg": {
+      "en": "Suggestion",
+      "fr": "Suggestion"
+    },
+    "offer_caveat": {
+      "en": "A recommendation, not an authorised price for you.",
+      "fr": "Une recommandation, et non un prix qui vous est accordé."
+    },
+    "offer_apply": {
+      "en": "Apply",
+      "fr": "Appliquer"
+    },
+    "offer_applied": {
+      "en": "Applied",
+      "fr": "Appliquée"
+    },
+    "av_eligible": {
+      "en": "available to you",
+      "fr": "disponible pour vous"
+    },
+    "av_not_eligible": {
+      "en": "available, not eligible for you",
+      "fr": "disponible, mais non éligible pour vous"
+    },
+    "av_not_determined": {
+      "en": "eligibility not determined",
+      "fr": "éligibilité non déterminée"
+    },
+    "av_select": {
+      "en": "Select",
+      "fr": "Sélectionner"
+    },
+    "av_selected": {
+      "en": "Selected",
+      "fr": "Sélectionné"
+    },
+    "review_service": {
+      "en": "Treatment",
+      "fr": "Soin"
+    },
+    "review_price": {
+      "en": "Price",
+      "fr": "Prix"
+    },
+    "review_offer": {
+      "en": "Offer applied",
+      "fr": "Offre appliquée"
+    },
+    "review_time": {
+      "en": "Time",
+      "fr": "Horaire"
+    },
+    "review_eligibility": {
+      "en": "Eligibility",
+      "fr": "Éligibilité"
+    },
+    "review_currency": {
+      "en": "Currency",
+      "fr": "Devise"
+    },
+    "review_source": {
+      "en": "Source",
+      "fr": "Source"
+    },
+    "review_none": {
+      "en": "Not selected",
+      "fr": "Non sélectionné"
+    },
+    "action_request": {
+      "en": "Request this time",
+      "fr": "Demander cet horaire"
+    },
+    "action_commit": {
+      "en": "Reserve",
+      "fr": "Réserver"
+    },
+    "action_restart": {
+      "en": "Start again",
+      "fr": "Recommencer"
+    },
+    "reason_no_service": {
+      "en": "Choose a treatment first.",
+      "fr": "Choisissez d'abord un soin."
+    },
+    "reason_no_time": {
+      "en": "Select an eligible time first.",
+      "fr": "Sélectionnez d'abord un horaire éligible."
+    },
+    "reason_ineligible": {
+      "en": "This time is available but you are not eligible for it, so it cannot be reserved.",
+      "fr": "Cet horaire est disponible mais vous n'y êtes pas éligible : il ne peut donc pas être réservé."
+    },
+    "posture_can_commit": {
+      "en": "Ready to reserve",
+      "fr": "Prêt à réserver"
+    },
+    "posture_can_request": {
+      "en": "Request only",
+      "fr": "Demande uniquement"
+    },
+    "posture_not_eligible": {
+      "en": "Not eligible",
+      "fr": "Non éligible"
+    },
+    "posture_no_capacity": {
+      "en": "No capacity",
+      "fr": "Aucune disponibilité"
+    },
+    "posture_not_determined": {
+      "en": "Not determined",
+      "fr": "Non déterminé"
+    },
+    "result_title": {
+      "en": "Simulated reservation recorded",
+      "fr": "Réservation simulée enregistrée"
+    },
+    "result_body": {
+      "en": "This is a fixture result. Nothing has been reserved, nothing has been charged, and no canonical record exists.",
+      "fr": "Ceci est un résultat fictif. Rien n'a été réservé, rien n'a été facturé, et aucun enregistrement canonique n'existe."
+    },
+    "result_reference": {
+      "en": "Fixture reference",
+      "fr": "Référence fictive"
+    },
+    "fixture_note": {
+      "en": "Simulated data — not authoritative",
+      "fr": "Données simulées — non autoritatives"
+    }
   }
 }

@@ -17,17 +17,13 @@
 // acknowledgement rather than composing its own. Nothing in the browser is ever
 // consulted again once the request is submitted.
 
-import strings from "../localization/strings.json";
 import type { CustomerProjection } from "../customer/projection";
 import { FRESHLINE_PROFILE, type BrandExperienceProfile } from "./brandProfile";
+// UAT-R1: the lookup that used to live here, now shared with Athena. Same logic,
+// same dictionary, same fallback — which is why the golden hash still matches.
+import { translate as t } from "../localization/translate";
 
-type LocalizedEntry = Record<string, string>;
 
-function t(section: string, key: string, locale: string): string {
-    const table = (strings as unknown as Record<string, Record<string, LocalizedEntry>>)[section];
-    const entry = table?.[key];
-    return entry?.[locale] ?? entry?.["en"] ?? "";
-}
 
 /** Escapes text for HTML body context. */
 export function escapeHtml(value: string): string {

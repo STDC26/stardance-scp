@@ -32,98 +32,226 @@ import {
     type ShellOffer,
     type ShellService
 } from "./contract";
+import { formatMoney } from "./money";
+import { resolveLocale } from "../localization/translate";
 
-export const ATHENA_FIXTURE_VERSION = "athena-uat.fixtures.v1";
+/**
+ * UAT-R1 bumped this from v1: the commercial content changed from IDR to EUR and
+ * gained French copy. A fixture whose content changes silently under a stable
+ * version string is a fixture nobody can reason about.
+ */
+export const ATHENA_FIXTURE_VERSION = "athena-uat.fixtures.v2";
+
+/** Athena presents EUR. It is a `bali` tenant; market identity does not pick currency. */
+export const ATHENA_CURRENCY = "EUR";
+
+/** Primary then secondary. Order matters: index 0 is the default. */
+export const ATHENA_LOCALES: readonly string[] = ["en", "fr"];
 export const FIXTURE_PROVIDER_NAME = "athena-fixture";
 
 /** Fixed instants so availability labels are stable across runs. */
 const FIXTURE_DAY = "2026-09-18";
 
-const ATHENA_SERVICES: readonly ShellService[] = [
+type Localized = Readonly<Record<string, string>>;
+
+function pick(entry: Localized, locale: string): string {
+    return entry[locale] ?? entry["en"] ?? "";
+}
+
+interface ServiceSeed {
+    code: string;
+    name: Localized;
+    description: Localized;
+    minorUnits: number;
+    durationMinutes: number;
+    featured?: boolean;
+}
+
+/**
+ * Amounts are in EUR minor units and are the SAME number in every locale. Only the
+ * words beside them change.
+ */
+const ATHENA_SERVICE_SEEDS: readonly ServiceSeed[] = [
     {
         code: "ATH-SIGNATURE-RITUAL",
-        name: "Signature Athena Ritual",
-        description:
-            "Ninety minutes. Warm oil, slow pressure, and a therapist who has read your notes before you arrive.",
-        price: { minorUnits: 185_000_000, currency: "IDR", display: "Rp 1.850.000" },
+        name: { en: "Signature Athena Ritual", fr: "Rituel Signature Athena" },
+        description: {
+            en: "Ninety minutes. Warm oil, slow pressure, and a therapist who has read your notes before you arrive.",
+            fr: "Quatre-vingt-dix minutes. Huile tiède, pression lente, et une praticienne qui a lu vos notes avant votre arrivée."
+        },
+        minorUnits: 18_500,
         durationMinutes: 90,
         featured: true
     },
     {
         code: "ATH-RESTORATIVE-DEEP",
-        name: "Restorative Deep Tissue",
-        description: "Sixty focused minutes for shoulders, neck and the places a laptop leaves behind.",
-        price: { minorUnits: 125_000_000, currency: "IDR", display: "Rp 1.250.000" },
+        name: { en: "Restorative Deep Tissue", fr: "Massage Profond Réparateur" },
+        description: {
+            en: "Sixty focused minutes for shoulders, neck and the places a laptop leaves behind.",
+            fr: "Soixante minutes ciblées pour les épaules, la nuque et tout ce que laisse un ordinateur portable."
+        },
+        minorUnits: 12_500,
         durationMinutes: 60
     },
     {
         code: "ATH-COUPLES-PAVILION",
-        name: "Pavilion for Two",
-        description: "Two therapists, one open-air pavilion, and no clock in the room.",
-        price: { minorUnits: 340_000_000, currency: "IDR", display: "Rp 3.400.000" },
+        name: { en: "Pavilion for Two", fr: "Pavillon pour Deux" },
+        description: {
+            en: "Two therapists, one open-air pavilion, and no clock in the room.",
+            fr: "Deux praticiennes, un pavillon à ciel ouvert, et aucune horloge dans la pièce."
+        },
+        minorUnits: 34_000,
         durationMinutes: 120
     }
 ];
 
-const ATHENA_OFFERS: readonly ShellOffer[] = [
+interface OfferSeed {
+    code: string;
+    label: Localized;
+    description: Localized;
+    minorUnits: number;
+    kind: "OFFER" | "RECOMMENDATION";
+}
+
+const ATHENA_OFFER_SEEDS: readonly OfferSeed[] = [
     {
         code: "ATH-OFFER-RESIDENT",
-        label: "Resident rate",
-        description: "Verified residency, applied at review rather than promised upfront.",
-        price: { minorUnits: 148_000_000, currency: "IDR", display: "Rp 1.480.000" },
+        label: { en: "Resident rate", fr: "Tarif résident" },
+        description: {
+            en: "Verified residency, applied at review rather than promised upfront.",
+            fr: "Résidence vérifiée, appliquée au récapitulatif plutôt que promise d'avance."
+        },
+        minorUnits: 14_800,
         kind: "OFFER"
     },
     {
         code: "ATH-REC-PAIRING",
-        label: "Often paired with a scalp ritual",
-        description: "A suggestion from prior guests, not a price we have authorised for you.",
-        price: { minorUnits: 45_000_000, currency: "IDR", display: "Rp 450.000" },
-        // RECOMMENDATION ≠ OFFER. The Shell must render this differently, and the
-        // kind field is what forces that rather than trusting copy.
+        label: { en: "Often paired with a scalp ritual", fr: "Souvent associé à un rituel du cuir chevelu" },
+        description: {
+            en: "A suggestion from prior guests, not a price we have authorised for you.",
+            fr: "Une suggestion d'anciens clients, et non un prix que nous vous avons accordé."
+        },
+        minorUnits: 4_500,
+        // RECOMMENDATION ≠ OFFER, in both languages.
         kind: "RECOMMENDATION"
     }
 ];
 
-const ATHENA_AVAILABILITY: readonly ShellAvailabilityWindow[] = [
-    { label: "Morning · 09:00", startsAt: `${FIXTURE_DAY}T09:00:00+08:00`, endsAt: `${FIXTURE_DAY}T10:30:00+08:00`, eligible: true },
-    { label: "Midday · 12:30", startsAt: `${FIXTURE_DAY}T12:30:00+08:00`, endsAt: `${FIXTURE_DAY}T14:00:00+08:00`, eligible: true },
-    // Available and NOT eligible — the distinction this fixture exists to prove.
-    { label: "Late afternoon · 16:00", startsAt: `${FIXTURE_DAY}T16:00:00+08:00`, endsAt: `${FIXTURE_DAY}T17:30:00+08:00`, eligible: false },
-    { label: "Evening · 19:00", startsAt: `${FIXTURE_DAY}T19:00:00+08:00`, endsAt: `${FIXTURE_DAY}T20:30:00+08:00`, eligible: true }
+interface WindowSeed {
+    id: string;
+    label: Localized;
+    startsAt: string;
+    endsAt: string;
+    eligible: boolean;
+}
+
+/**
+ * Three eligible windows and one that is AVAILABLE but NOT ELIGIBLE — UAT-R1 §7
+ * requires at least two eligible options plus one visible ineligible one.
+ */
+const ATHENA_WINDOW_SEEDS: readonly WindowSeed[] = [
+    { id: "w-0900", label: { en: "Morning · 09:00", fr: "Matin · 09h00" }, startsAt: `${FIXTURE_DAY}T09:00:00+08:00`, endsAt: `${FIXTURE_DAY}T10:30:00+08:00`, eligible: true },
+    { id: "w-1230", label: { en: "Midday · 12:30", fr: "Midi · 12h30" }, startsAt: `${FIXTURE_DAY}T12:30:00+08:00`, endsAt: `${FIXTURE_DAY}T14:00:00+08:00`, eligible: true },
+    { id: "w-1600", label: { en: "Late afternoon · 16:00", fr: "Fin d'après-midi · 16h00" }, startsAt: `${FIXTURE_DAY}T16:00:00+08:00`, endsAt: `${FIXTURE_DAY}T17:30:00+08:00`, eligible: false },
+    { id: "w-1900", label: { en: "Evening · 19:00", fr: "Soirée · 19h00" }, startsAt: `${FIXTURE_DAY}T19:00:00+08:00`, endsAt: `${FIXTURE_DAY}T20:30:00+08:00`, eligible: true }
 ];
+
+/** Stable ids so a selection survives a language switch. */
+export function athenaWindowIds(): readonly string[] {
+    return ATHENA_WINDOW_SEEDS.map((w) => w.id);
+}
+
+function servicesFor(locale: string): readonly ShellService[] {
+    return ATHENA_SERVICE_SEEDS.map((seed) => ({
+        code: seed.code,
+        name: pick(seed.name, locale),
+        description: pick(seed.description, locale),
+        price: {
+            minorUnits: seed.minorUnits,
+            currency: ATHENA_CURRENCY,
+            display: formatMoney(seed.minorUnits, ATHENA_CURRENCY, locale)
+        },
+        durationMinutes: seed.durationMinutes,
+        ...(seed.featured === true ? { featured: true } : {})
+    }));
+}
+
+function offersFor(locale: string): readonly ShellOffer[] {
+    return ATHENA_OFFER_SEEDS.map((seed) => ({
+        code: seed.code,
+        label: pick(seed.label, locale),
+        description: pick(seed.description, locale),
+        price: {
+            minorUnits: seed.minorUnits,
+            currency: ATHENA_CURRENCY,
+            display: formatMoney(seed.minorUnits, ATHENA_CURRENCY, locale)
+        },
+        kind: seed.kind
+    }));
+}
+
+function availabilityFor(locale: string): readonly ShellAvailabilityWindow[] {
+    return ATHENA_WINDOW_SEEDS.map((seed) => ({
+        label: pick(seed.label, locale),
+        startsAt: seed.startsAt,
+        endsAt: seed.endsAt,
+        eligible: seed.eligible
+    }));
+}
 
 const ATHENA_COMMITTABLE: Committable = {
     posture: "CAN_COMMIT",
+    // Technical English on purpose: this string is inspector copy, not customer
+    // copy. What the visitor reads comes from the localization dictionary, so a
+    // translation gap can never change a commercial posture.
     reason:
         "Service, authorised price, eligibility and capacity are all resolved in this fixture set. " +
         "This posture is FIXTURE-sourced and asserts nothing about live SCP capability.",
     resolved: { service: true, price: true, eligibility: true, capacity: true }
 };
 
-const ATHENA_BRAND: DemandPayload["brand"] = {
-    name: "athena",
-    publicName: "Athena",
-    tagline: "Unhurried treatment, arranged around you.",
-    marketDescriptor: "Ubud · by appointment",
-    colors: {
-        ink: "#1A1714",
-        parchment: "#F7F3EC",
-        bronze: "#8C6A43",
-        sage: "#5A6B5D",
-        line: "#DED5C7"
-    },
-    headingFont: "'Cormorant Garamond', 'Iowan Old Style', Georgia, serif",
-    bodyFont: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+const ATHENA_TAGLINE: Localized = {
+    en: "Unhurried treatment, arranged around you.",
+    fr: "Un soin sans hâte, organisé autour de vous."
 };
 
+const ATHENA_DESCRIPTOR: Localized = {
+    en: "Ubud · by appointment",
+    fr: "Ubud · sur rendez-vous"
+};
+
+function brandFor(locale: string): DemandPayload["brand"] {
+    return {
+        name: "athena",
+        publicName: "Athena",
+        tagline: pick(ATHENA_TAGLINE, locale),
+        marketDescriptor: pick(ATHENA_DESCRIPTOR, locale),
+        colors: {
+            ink: "#1A1714",
+            parchment: "#F7F3EC",
+            bronze: "#8C6A43",
+            sage: "#5A6B5D",
+            line: "#DED5C7"
+        },
+        headingFont: "'Cormorant Garamond', 'Iowan Old Style', Georgia, serif",
+        bodyFont: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+    };
+}
+
+/**
+ * MARKET ≠ CURRENCY. Athena's market identity is `bali` and its commercial
+ * currency is EUR — this field previously said IDR, which was the market leaking
+ * into the commercial plane, and UAT-R1 §4 exists to forbid exactly that.
+ */
 const ATHENA_MARKET: DemandPayload["market"] = {
     marketId: "bali",
     timezone: "Asia/Makassar",
-    currency: "IDR",
+    currency: ATHENA_CURRENCY,
     regions: ["Ubud Centre", "Sayan", "Penestanan", "Tegallalang"],
     operatingHours: { open: "09:00", close: "21:00" }
 };
 
+/** Operator-facing fixture state. Technical vocabulary; this feeds the inspector. */
 const ATHENA_OPERATE: OperatePayload = {
     items: [
         {
@@ -168,12 +296,9 @@ const ATHENA_OPERATE: OperatePayload = {
 };
 
 interface FixtureSet {
-    brand: DemandPayload["brand"];
-    market: DemandPayload["market"];
-    services: readonly ShellService[];
-    offers: readonly ShellOffer[];
-    availability: readonly ShellAvailabilityWindow[];
-    committable: Committable;
+    locales: readonly string[];
+    currency: string;
+    demand(locale: string): DemandPayload;
     operate: OperatePayload;
 }
 
@@ -183,12 +308,16 @@ interface FixtureSet {
  */
 const FIXTURES: Readonly<Record<string, FixtureSet>> = {
     "athena-uat": {
-        brand: ATHENA_BRAND,
-        market: ATHENA_MARKET,
-        services: ATHENA_SERVICES,
-        offers: ATHENA_OFFERS,
-        availability: ATHENA_AVAILABILITY,
-        committable: ATHENA_COMMITTABLE,
+        locales: ATHENA_LOCALES,
+        currency: ATHENA_CURRENCY,
+        demand: (locale) => ({
+            brand: brandFor(locale),
+            market: ATHENA_MARKET,
+            services: servicesFor(locale),
+            offers: offersFor(locale),
+            availability: availabilityFor(locale),
+            committable: ATHENA_COMMITTABLE
+        }),
         operate: ATHENA_OPERATE
     }
 };
@@ -208,6 +337,13 @@ export function fixtureTenants(): readonly string[] {
     return Object.keys(FIXTURES);
 }
 
+/** What locales a fixture tenant actually supports. */
+export function fixtureLocales(tenant: string): readonly string[] {
+    return Object.prototype.hasOwnProperty.call(FIXTURES, tenant)
+        ? FIXTURES[tenant]?.locales ?? []
+        : [];
+}
+
 export function createFixtureProjectionProvider(): ProjectionProvider {
     const resolve = (tenant: string): FixtureSet => {
         const set = Object.prototype.hasOwnProperty.call(FIXTURES, tenant)
@@ -225,13 +361,16 @@ export function createFixtureProjectionProvider(): ProjectionProvider {
 
         async demand(request: ProjectionRequest): Promise<ProjectionEnvelope<DemandPayload>> {
             const set = resolve(request.tenant);
+            const locale = resolveLocale(request.locale, set.locales);
+            const payload = set.demand(locale);
+
             return {
                 tenant: request.tenant,
                 actor: request.actor,
                 perspective: "DEMAND",
                 authority: {
                     canRequest: true,
-                    canCommit: set.committable.posture === "CAN_COMMIT",
+                    canCommit: payload.committable.posture === "CAN_COMMIT",
                     requiresAuthority: false,
                     grants: ["DEMAND_SUBMIT", "DEMAND_COMMIT_FIXTURE"]
                 },
@@ -243,10 +382,10 @@ export function createFixtureProjectionProvider(): ProjectionProvider {
                         id: "commit",
                         label: "Reserve",
                         kind: "COMMIT",
-                        enabled: set.committable.posture === "CAN_COMMIT",
-                        ...(set.committable.posture === "CAN_COMMIT"
+                        enabled: payload.committable.posture === "CAN_COMMIT",
+                        ...(payload.committable.posture === "CAN_COMMIT"
                             ? {}
-                            : { reason: set.committable.reason })
+                            : { reason: payload.committable.reason })
                     }
                 ],
                 provenance: {
@@ -256,14 +395,7 @@ export function createFixtureProjectionProvider(): ProjectionProvider {
                     generatedAt: new Date().toISOString(),
                     correlationId: request.correlationId ?? null
                 },
-                payload: {
-                    brand: set.brand,
-                    market: set.market,
-                    services: set.services,
-                    offers: set.offers,
-                    availability: set.availability,
-                    committable: set.committable
-                }
+                payload
             };
         },
 
