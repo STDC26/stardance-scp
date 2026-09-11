@@ -8,14 +8,24 @@
 
 import type { CustomerProjection } from "../../src/customer/projection";
 
-export function customerProjectionFixture(): CustomerProjection {
+export interface FixtureOverrides {
+    /** UAT-R2: lets a localization test ask for the real ["en","id"] set without
+     *  disturbing the golden-hash fixture, whose values must never move. */
+    supportedLocales?: string[];
+    localeDefault?: string;
+    regions?: string[];
+    accommodationTypes?: string[];
+    tagline?: string;
+}
+
+export function customerProjectionFixture(overrides: FixtureOverrides = {}): CustomerProjection {
     return {
         authoritative: false,
         brand: {
             name: "freshline",
             publicName: "Freshline Studio",
             marketDescriptor: "Bali · mobile service",
-            tagline: "Booked today, done today.",
+            tagline: overrides.tagline ?? "Booked today, done today.",
             colors: {
                 primaryBlack: "#0B0D0E",
                 freshlineTeal: "#00AFA5",
@@ -30,12 +40,12 @@ export function customerProjectionFixture(): CustomerProjection {
             marketId: "bali",
             timezone: "Asia/Makassar",
             currency: "IDR",
-            localeDefault: "en-US",
-            supportedLocales: ["en-US", "id-ID"],
+            localeDefault: overrides.localeDefault ?? "en-US",
+            supportedLocales: overrides.supportedLocales ?? ["en-US", "id-ID"],
             operatingHours: { open: "09:00", close: "23:00" },
             operatingHoursOrigin: "CANONICAL",
-            regions: ["Canggu", "Seminyak", "Ubud"],
-            accommodationTypes: ["VILLA", "HOTEL", "APARTMENT"],
+            regions: overrides.regions ?? ["Canggu", "Seminyak", "Ubud"],
+            accommodationTypes: overrides.accommodationTypes ?? ["VILLA", "HOTEL", "APARTMENT"],
             bookingWindow: { minLeadMinutes: 120, maxAdvanceDays: 60 }
         },
         catalogue: {

@@ -243,6 +243,10 @@
     "error_generic": {
       "en": "Something went wrong on our side. Your details are still here — please try again.",
       "id": "Terjadi kesalahan di pihak kami. Detail Anda masih tersimpan — silakan coba lagi."
+    },
+    "hint_date_format": {
+      "en": "",
+      "id": "Format tanggal mengikuti pengaturan peramban Anda (bb/hh/tttt)."
     }
   },
   "partner": {
@@ -579,6 +583,17 @@
     "fixture_note": {
       "en": "Simulated data — not authoritative",
       "fr": "Données simulées — non autoritatives"
+    }
+  },
+  "display": {
+    "Other": {
+      "id": "Lainnya"
+    },
+    "Villa": {
+      "id": "Vila"
+    },
+    "Your style, your space, your Freshline.": {
+      "id": "Gaya Anda, ruang Anda, Freshline Anda."
     }
   }
 }

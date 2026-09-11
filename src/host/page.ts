@@ -67,6 +67,23 @@ function checkChip(value: string, label: string, sub: string): string {
     </label>`;
 }
 
+
+/**
+ * UAT-R2 — presentation overlay for configuration-sourced display strings.
+ *
+ * Tenant configuration (schema v2) has no locale dimension, so a region, an
+ * accommodation type or a tagline arrives as one string for every language. This
+ * translates the GENERIC ones for display only; the canonical value submitted to
+ * the runtime is untouched, so localization changes presentation and never truth.
+ *
+ * The dictionary carries `id` entries only. With no `en` entry the lookup returns
+ * empty and the raw configured value is used, which is why English output is
+ * byte-identical to the golden recorded before any of this existed.
+ */
+function display(raw: string, locale: string): string {
+    return t("display", raw, locale) || raw;
+}
+
 export interface PageOptions {
     projection: CustomerProjection;
     locale: string;
@@ -85,6 +102,10 @@ export function renderCustomerPage(options: PageOptions): string {
     const locale = p.market.supportedLocales.includes(options.locale)
         ? options.locale
         : p.market.localeDefault;
+    // UAT-R2: resolved once. Empty for locales with no hint, which keeps both the
+    // element AND its style rule out of the document — so English output stays
+    // byte-identical to the pre-existing golden.
+    const dateHint = t("customer", "hint_date_format", locale);
     const colors = p.brand.colors;
     const black = colors["primaryBlack"] ?? "#0B0D0E";
     const teal = colors["freshlineTeal"] ?? "#00AFA5";
@@ -115,11 +136,14 @@ export function renderCustomerPage(options: PageOptions): string {
         .join("\n");
 
     const regions = p.market.regions
-        .map((region, index) => chip("region", region, region, null, index === 0))
+        .map((region, index) => chip("region", region, display(region, locale), null, index === 0))
         .join("\n");
 
     const accommodations = p.market.accommodationTypes
-        .map((type) => `<option value="${escapeHtml(type)}">${escapeHtml(type)}</option>`)
+        .map(
+            (type) =>
+                `<option value="${escapeHtml(type)}">${escapeHtml(display(type, locale))}</option>`
+        )
         .join("");
 
     const times = timeChips(p.market.operatingHours.open, p.market.operatingHours.close)
@@ -185,7 +209,9 @@ h2 .opt{text-transform:none;letter-spacing:0;font-weight:400;opacity:.55;font-si
 .chips-inline .chip{flex:0 1 auto}
 .chips-inline .chip-body{padding:10px 14px;min-width:44px;text-align:center}
 label.field{display:block;margin:14px 0}
-label.field span{display:block;font-size:.85rem;color:var(--silver);opacity:.75;margin-bottom:6px}
+label.field span{display:block;font-size:.85rem;color:var(--silver);opacity:.75;margin-bottom:6px}${
+    dateHint === "" ? "" : "\n.hint{display:block;font-size:.78rem;color:var(--silver);opacity:.6;margin-top:6px}"
+}
 input[type=text],input[type=tel],input[type=date],select{
   width:100%;min-height:48px;padding:12px 14px;font:inherit;color:var(--white);
   background:rgba(231,236,239,.06);border:1px solid rgba(231,236,239,.22);border-radius:12px}
@@ -222,7 +248,7 @@ button:disabled{opacity:.55;cursor:progress}
   <h1>${escapeHtml(p.brand.publicName)} <span class="mkt">${escapeHtml(p.brand.marketDescriptor)}</span></h1>
   <nav aria-label="${escapeHtml(t("customer", "language", locale))}">${languageLinks}</nav>
 </header>
-<p class="tagline">${escapeHtml(p.brand.tagline)}</p>
+<p class="tagline">${escapeHtml(display(p.brand.tagline, locale))}</p>
 <p class="hours">${escapeHtml(openHours)}</p>
 
 <form id="booking" novalidate>
@@ -241,7 +267,7 @@ ${extras}
   <h2>${escapeHtml(t("customer", "heading_when", locale))}</h2>
   <label class="field">
     <span>${escapeHtml(t("customer", "label_date", locale))}</span>
-    <input type="date" name="requestedDate" required>
+    <input type="date" name="requestedDate" required>${dateHint === "" ? "" : `\n    <span class="hint">${escapeHtml(dateHint)}</span>`}
   </label>
   <label class="field"><span>${escapeHtml(t("customer", "label_time", locale))}</span></label>
   <div class="chips chips-inline">

@@ -118,15 +118,16 @@ function serviceCard(
         journey.selection.locale
     );
 
-    return `<article class="svc${service.featured === true ? " svc-featured" : ""}${chosen ? " svc-chosen" : ""}">
+    return `<a class="svc${service.featured === true ? " svc-featured" : ""}${chosen ? " svc-chosen" : ""}"
+       href="${escapeHtml(href)}" aria-pressed="${chosen ? "true" : "false"}">
       <div class="svc-head">
         <h3>${escapeHtml(service.name)}</h3>
         <p class="svc-price">${escapeHtml(price)}</p>
       </div>
       ${service.description === undefined ? "" : `<p class="svc-copy">${escapeHtml(service.description)}</p>`}
       <p class="svc-meta">${service.durationMinutes} ${escapeHtml(t("svc_minutes"))} · ${escapeHtml(service.code)}</p>
-      <a class="btn${chosen ? " btn-on" : ""}" href="${escapeHtml(href)}">${escapeHtml(chosen ? t("svc_chosen") : t("svc_choose"))}</a>
-    </article>`;
+      <span class="btn${chosen ? " btn-on" : ""}">${escapeHtml(chosen ? t("svc_chosen") : t("svc_choose"))}</span>
+    </a>`;
 }
 
 function offerRow(
@@ -149,7 +150,7 @@ function offerRow(
       <span class="offer-price">${escapeHtml(price)}</span>
       ${offer.description === undefined ? "" : `<span class="offer-copy">${escapeHtml(offer.description)}</span>`}
       ${isRecommendation ? `<span class="offer-caveat">${escapeHtml(t("offer_caveat"))}</span>` : ""}
-      <a class="offer-act" href="${escapeHtml(href)}">${escapeHtml(applied ? t("offer_applied") : t("offer_apply"))}</a>
+      <a class="offer-act" href="${escapeHtml(href)}" aria-pressed="${applied ? "true" : "false"}">${escapeHtml(applied ? t("offer_applied") : t("offer_apply"))}</a>
     </li>`;
 }
 
@@ -176,9 +177,11 @@ function availabilityRow(
     });
 
     return `<li class="av${window.eligible === false ? " av-off" : ""}${selected ? " av-on" : ""}">
-      <span class="av-label">${escapeHtml(window.label)}</span>
-      ${status}
-      <a class="av-act" href="${escapeHtml(href)}">${escapeHtml(selected ? t("av_selected") : t("av_select"))}</a>
+      <a class="av-link" href="${escapeHtml(href)}" aria-pressed="${selected ? "true" : "false"}">
+        <span class="av-label">${escapeHtml(window.label)}</span>
+        ${status}
+        <span class="av-act">${escapeHtml(selected ? t("av_selected") : t("av_select"))}</span>
+      </a>
     </li>`;
 }
 
@@ -271,6 +274,27 @@ function reviewSection(
     </section>`;
 }
 
+
+/**
+ * UAT-R2 — the next action, stated where the customer is looking.
+ *
+ * The founder could not complete the journey even though every control worked. The
+ * guidance that said what to do next lived in the Review section at the bottom of a
+ * long page, so a selection produced no visible progress at the point of attention.
+ * This strip is that feedback, above the fold, updating on every step.
+ */
+function stepStrip(journey: AthenaJourney, t: (key: string) => string): string {
+    const postureKey = POSTURE_KEY[journey.posture] ?? "posture_not_determined";
+    const next = journey.blockedReasonKey === null ? t("posture_can_commit") : t(journey.blockedReasonKey);
+    const done = (journey.service === null ? 0 : 1) + (journey.window === null ? 0 : 1);
+
+    return `<aside class="steps" aria-live="polite">
+      <span class="steps-dots">${[0, 1].map((i) => `<span class="dot${i < done ? " dot-on" : ""}"></span>`).join("")}</span>
+      <span class="steps-posture">${escapeHtml(t(postureKey))}</span>
+      <span class="steps-next">${escapeHtml(next)}</span>
+    </aside>`;
+}
+
 export function renderAthenaPage(options: AthenaPageOptions): string {
     const { envelope, profile, inspectorPath } = options;
     const d = envelope.payload;
@@ -327,9 +351,19 @@ h2{font-family:var(--body);font-size:.75rem;font-weight:600;
 .btn-on{background:var(--sage);color:#fff;border-color:var(--sage)}
 .btn-off{opacity:.38;cursor:not-allowed}
 
+.steps{display:flex;flex-wrap:wrap;align-items:center;gap:14px;margin:0 0 26px;padding:14px 18px;
+  border:1px solid var(--line);border-radius:var(--radius);background:#fff}
+.steps-dots{display:inline-flex;gap:6px}
+.dot{width:9px;height:9px;border-radius:50%;border:1px solid var(--sage)}
+.dot-on{background:var(--sage)}
+.steps-posture{font-family:var(--heading);font-size:1.1rem}
+.steps-next{color:var(--sage);font-style:italic;font-size:.9rem}
+
 .svcs{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:${profile.chipGap}}
 .svc{border:1px solid var(--line);border-radius:var(--radius);padding:28px;background:rgba(255,255,255,.55);
-  display:flex;flex-direction:column;gap:0}
+  display:flex;flex-direction:column;gap:0;text-decoration:none;color:inherit;cursor:pointer}
+.svc:hover{border-color:var(--bronze)}
+.svc .btn{pointer-events:none}
 .svc-featured{border-color:var(--bronze);background:#fff}
 .svc-chosen{outline:2px solid var(--sage);outline-offset:-2px}
 .svc-head{display:flex;justify-content:space-between;align-items:baseline;gap:16px}
@@ -354,8 +388,10 @@ h2{font-family:var(--body);font-size:.75rem;font-weight:600;
   text-transform:uppercase;color:var(--ink);min-height:44px;display:inline-flex;align-items:center}
 
 .avs{list-style:none;margin:0;padding:0;display:grid;gap:2px}
-.av{display:flex;justify-content:space-between;align-items:center;gap:20px;
-  padding:16px 20px;background:rgba(255,255,255,.55);border:1px solid var(--line)}
+.av{background:rgba(255,255,255,.55);border:1px solid var(--line)}
+.av-link{display:flex;justify-content:space-between;align-items:center;gap:20px;
+  padding:16px 20px;text-decoration:none;color:inherit;cursor:pointer}
+.av:hover{border-color:var(--bronze)}
 .av-off{background:transparent;opacity:.78}
 .av-on{outline:2px solid var(--sage);outline-offset:-2px}
 .av-label{font-family:var(--heading);font-size:1.15rem}
@@ -408,6 +444,7 @@ h2{font-family:var(--body);font-size:.75rem;font-weight:600;
 <div class="wrap">
 ${sourceBanner(envelope, inspectorPath, t)}
 ${languageSwitch(options, selection, t)}
+${stepStrip(journey, t)}
 
 <header class="masthead">
   <p class="state">${escapeHtml(envelope.state.label)}</p>
