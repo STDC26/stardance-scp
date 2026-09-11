@@ -653,3 +653,22 @@ describe("C8 responsive composition", () => {
         expect(html).toContain('name="robots" content="noindex"');
     });
 });
+
+describe("UAT-R2 state label localization", () => {
+    it("localizes the projection state label by its canonical code", async () => {
+        const en = athenaHtml(await athenaDemand("en"), "lang=en");
+        const fr = athenaHtml(await athenaDemand("fr"), "lang=fr");
+
+        expect(en).toContain("Accepting requests");
+        // The founder-visible leak: an English state label on a French surface.
+        expect(fr).toContain("Demandes acceptées");
+        expect(fr).not.toContain("Accepting requests");
+    });
+
+    it("falls back to the envelope label for a state with no entry", async () => {
+        const envelope = await athenaDemand("fr");
+        const unknown = { ...envelope, state: { code: "NOVEL_STATE", label: "Novel", terminal: false } };
+        // Degrades to the envelope's own label, never to a blank.
+        expect(athenaHtml(unknown, "lang=fr")).toContain("Novel");
+    });
+});

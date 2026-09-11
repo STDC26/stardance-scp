@@ -583,6 +583,18 @@
     "fixture_note": {
       "en": "Simulated data — not authoritative",
       "fr": "Données simulées — non autoritatives"
+    },
+    "state_DEMAND_OPEN": {
+      "en": "Accepting requests",
+      "fr": "Demandes acceptées"
+    },
+    "state_QUEUE_ACTIVE": {
+      "en": "In queue",
+      "fr": "En file d'attente"
+    },
+    "state_QUEUE_EMPTY": {
+      "en": "No operator work",
+      "fr": "Aucun travail en cours"
     }
   },
   "display": {

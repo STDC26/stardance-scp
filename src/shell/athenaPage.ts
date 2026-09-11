@@ -283,6 +283,21 @@ function reviewSection(
  * long page, so a selection produced no visible progress at the point of attention.
  * This strip is that feedback, above the fold, updating on every step.
  */
+/**
+ * UAT-R2 — the projection's state label, in the customer's language.
+ *
+ * The envelope carries an English label because a projection is not a renderer.
+ * The Shell localizes it by the state CODE, which is the canonical part, and falls
+ * back to the envelope's own label when a state has no entry — so a new state
+ * degrades to English rather than to a blank.
+ */
+function stateLabel(
+    envelope: ProjectionEnvelope<DemandPayload>,
+    t: (key: string) => string
+): string {
+    return t(`state_${envelope.state.code}`) || envelope.state.label;
+}
+
 function stepStrip(journey: AthenaJourney, t: (key: string) => string): string {
     const postureKey = POSTURE_KEY[journey.posture] ?? "posture_not_determined";
     const next = journey.blockedReasonKey === null ? t("posture_can_commit") : t(journey.blockedReasonKey);
@@ -447,7 +462,7 @@ ${languageSwitch(options, selection, t)}
 ${stepStrip(journey, t)}
 
 <header class="masthead">
-  <p class="state">${escapeHtml(envelope.state.label)}</p>
+  <p class="state">${escapeHtml(stateLabel(envelope, t))}</p>
   <h1>${escapeHtml(d.brand.publicName)}</h1>
   <p class="tagline">${escapeHtml(d.brand.tagline)}</p>
   <p class="locale">${escapeHtml(d.brand.marketDescriptor)} · ${escapeHtml(d.market.operatingHours.open)}–${escapeHtml(d.market.operatingHours.close)}</p>
