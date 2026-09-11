@@ -120,13 +120,14 @@ describe("C3/C4 provenance", () => {
         }
     });
 
-    it("surfaces the source unmistakably in the rendered page", async () => {
+    it("states the simulation in plain language, not in system vocabulary", async () => {
+        // UPDATED BY CLOSE-01-B. This previously asserted "<strong>FIXTURE</strong>"
+        // on the customer surface. Fixture honesty is unchanged — what changed is
+        // that it is now said in words an actor can read. The raw vocabulary lives
+        // in the inspector, asserted below.
         const html = athenaHtml(await athenaDemand());
 
-        expect(html).toContain("<strong>FIXTURE</strong>");
-        // Assert on the class actually APPLIED to the banner, not on the presence
-        // of the string anywhere — both classes are defined in the stylesheet, so a
-        // bare substring check would pass for the wrong reason.
+        expect(html).toContain("Simulated experience — no real booking or payment will be created.");
         expect(html).toContain('class="src src-fixture"');
         expect(html).not.toContain('class="src src-live"');
     });
@@ -296,7 +297,7 @@ describe("C8 semantic integrity", () => {
         const envelope = await athenaDemand();
         const html = athenaHtml(envelope, "svc=ATH-SIGNATURE-RITUAL&slot=2");
 
-        expect(html).toContain("Not eligible");
+        expect(html).toContain("This time is not eligible for this request.");
         expect(html).toContain(
             "This time is available but you are not eligible for it, so it cannot be reserved."
         );
@@ -310,13 +311,13 @@ describe("C8 semantic integrity", () => {
 
         // Nothing chosen: no posture claim beyond "not determined", and no request.
         const empty = athenaHtml(envelope);
-        expect(empty).toContain("Not determined");
+        expect(empty).toContain("Choose a treatment to continue.");
         expect(empty).toContain("Choose a treatment first.");
         expect(empty).not.toContain("Ready to reserve");
 
         // Service but no time: request is honest, reserve is not yet.
         const partial = athenaHtml(envelope, "svc=ATH-SIGNATURE-RITUAL");
-        expect(partial).toContain("Request only");
+        expect(partial).toContain("Select an eligible time.");
         expect(partial).toContain("Select an eligible time first.");
         expect(partial).not.toContain("Ready to reserve");
 
@@ -378,7 +379,7 @@ describe("C8 semantic integrity", () => {
 
         // Submitting an ineligible selection must not manufacture a result.
         expect(html).not.toContain("Simulated reservation recorded");
-        expect(html).toContain("Not eligible");
+        expect(html).toContain("This time is not eligible for this request.");
     });
 });
 
@@ -391,8 +392,8 @@ describe("UAT-R1 Athena interaction", () => {
         const envelope = await athenaDemand();
 
         const steps = [
-            { query: "", expect: "Choose a treatment first." },
-            { query: "svc=ATH-SIGNATURE-RITUAL", expect: "Select an eligible time first." },
+            { query: "", expect: "Choose a treatment to continue." },
+            { query: "svc=ATH-SIGNATURE-RITUAL", expect: "Select an eligible time." },
             { query: "svc=ATH-SIGNATURE-RITUAL&slot=0", expect: "Ready to reserve" },
             { query: "svc=ATH-SIGNATURE-RITUAL&slot=0&done=1", expect: "Simulated reservation recorded" }
         ];
@@ -475,7 +476,8 @@ describe("UAT-R1 localization invariance", () => {
         expect(html).toContain("Récapitulatif");
         expect(html).toContain("Les soins");
         expect(html).toContain("disponible, mais non éligible pour vous");
-        expect(html).toContain("Non éligible");
+        // escapeHtml renders the apostrophe as &#39;, so assert a fragment without one.
+        expect(html).toContain("pas éligible pour cette demande");
         expect(html).toContain('lang="fr"');
     });
 
@@ -670,5 +672,149 @@ describe("UAT-R2 state label localization", () => {
         const unknown = { ...envelope, state: { code: "NOVEL_STATE", label: "Novel", terminal: false } };
         // Degrades to the envelope's own label, never to a blank.
         expect(athenaHtml(unknown, "lang=fr")).toContain("Novel");
+    });
+});
+
+
+// ---------------------------------------------------------------------------
+// CLOSE-01 — interaction context, experience language, locale stability
+// ---------------------------------------------------------------------------
+
+describe("CLOSE-01-A interaction context", () => {
+    it("anchors every control to the thing it changed", async () => {
+        // A navigation with no fragment lands at document top, which is what threw
+        // the user off "Pavilion for Two" — the third card, far down the page.
+        const html = athenaHtml(await athenaDemand());
+
+        expect(html).toContain("#ATH-COUPLES-PAVILION");
+        expect(html).toContain("#ATH-SIGNATURE-RITUAL");
+        expect(html).toContain("#ATH-RESTORATIVE-DEEP");
+        expect(html).toContain("#when");
+        expect(html).toContain("#offers");
+    });
+
+    it("provides the anchor targets those fragments point at", async () => {
+        const html = athenaHtml(await athenaDemand());
+
+        expect(html).toContain('id="ATH-COUPLES-PAVILION"');
+        expect(html).toContain('id="when"');
+        expect(html).toContain('id="offers"');
+        expect(html).toContain('id="review"');
+        // Context above the anchor, rather than jamming it to the viewport edge.
+        expect(html).toContain("scroll-margin-top");
+    });
+
+    it("sends the commit and request actions to the review section", async () => {
+        const html = athenaHtml(await athenaDemand(), "svc=ATH-SIGNATURE-RITUAL&slot=0");
+        expect(html).toContain("#review");
+    });
+
+    it("keeps the locale on every anchored control", async () => {
+        // A fragment must not cost the language. Every control carries lang=fr.
+        const html = athenaHtml(await athenaDemand("fr"), "lang=fr");
+        // The language switch legitimately offers the other locale; every OTHER
+        // control must carry the active one.
+        const hrefs = (html.match(/href="\/labs\/athena[^"]*"/g) ?? []).filter(
+            (href) => !href.includes("lang=en")
+        );
+
+        expect(hrefs.length).toBeGreaterThan(4);
+        for (const href of hrefs) {
+            expect(href, href).toContain("lang=fr");
+        }
+    });
+
+    it("exposes selection state semantically", async () => {
+        const html = athenaHtml(await athenaDemand(), "svc=ATH-SIGNATURE-RITUAL&slot=0");
+        expect(html).toContain('aria-pressed="true"');
+        expect(html).toContain('aria-pressed="false"');
+    });
+});
+
+describe("CLOSE-01-B experience language boundary", () => {
+    const FORBIDDEN_ON_ACTOR_SURFACE = [
+        "athena-uat.fixtures.v2",
+        "ATHENA-FIXTURE",
+        "sourceType",
+        "fixtureVersion",
+        "ProjectionProvider",
+        "NOT_DETERMINED",
+        "CAN_COMMIT",
+        "CAN_REQUEST",
+        "INSPECT PROJECTION"
+    ];
+
+    it("keeps raw system vocabulary off the customer surface in both languages", async () => {
+        for (const locale of ["en", "fr"]) {
+            const html = athenaHtml(await athenaDemand(locale), `lang=${locale}&svc=ATH-SIGNATURE-RITUAL&slot=0`);
+            for (const term of FORBIDDEN_ON_ACTOR_SURFACE) {
+                expect(html, `${term} leaked in ${locale}`).not.toContain(term);
+            }
+        }
+    });
+
+    it("does not use an internal service code as a primary label", async () => {
+        const html = athenaHtml(await athenaDemand());
+        // The code may still appear inside an href/anchor id — it is an identifier
+        // there, not label text — but never as copy the customer must interpret.
+        expect(html).not.toContain("90 minutes · ATH-SIGNATURE-RITUAL");
+        expect(html).not.toContain("· ATH-COUPLES-PAVILION</p>");
+    });
+
+    it("still says plainly that nothing real is created", async () => {
+        expect(athenaHtml(await athenaDemand())).toContain(
+            "Simulated experience — no real booking or payment will be created."
+        );
+        expect(athenaHtml(await athenaDemand("fr"), "lang=fr")).toContain("Expérience simulée");
+    });
+
+    it("offers the technical details in actor-appropriate wording", async () => {
+        expect(athenaHtml(await athenaDemand())).toContain("View technical details");
+        expect(athenaHtml(await athenaDemand("fr"), "lang=fr")).toContain("Voir les détails techniques");
+    });
+
+    it("KEEPS the canonical truth available in the diagnostic surface", async () => {
+        // The boundary moves vocabulary; it must not destroy it.
+        const report = inspect(await athenaDemand());
+        const html = renderInspector([report]);
+
+        expect(html).toContain("FIXTURE");
+        expect(html).toContain(ATHENA_FIXTURE_VERSION);
+        expect(report.source.sourceType).toBe("FIXTURE");
+        expect(report.commercial.committablePosture).toBe("CAN_COMMIT");
+    });
+
+    it("leaves canonical state codes unrenamed", async () => {
+        // Copy was repaired, not the model.
+        const envelope = await athenaDemand();
+        expect(envelope.payload.committable.posture).toBe("CAN_COMMIT");
+        expect(envelope.state.code).toBe("DEMAND_OPEN");
+    });
+});
+
+describe("CLOSE-01-C locale stability", () => {
+    it("never emits a control that drops or flips the locale", async () => {
+        for (const locale of ["en", "fr"]) {
+            const html = athenaHtml(
+                await athenaDemand(locale),
+                `lang=${locale}&svc=ATH-SIGNATURE-RITUAL&slot=2&offer=ATH-OFFER-RESIDENT`
+            );
+            const hrefs = (html.match(/href="\/labs\/athena[^"]*"/g) ?? []).filter(
+                (href) => !href.includes(`lang=${locale === "en" ? "fr" : "en"}`)
+            );
+
+            for (const href of hrefs) {
+                expect(href, `${href} in ${locale}`).toContain(`lang=${locale}`);
+            }
+        }
+    });
+
+    it("only the language control changes the language", async () => {
+        const html = athenaHtml(await athenaDemand("en"), "lang=en&svc=ATH-SIGNATURE-RITUAL");
+        const switching = (html.match(/href="\/labs\/athena[^"]*lang=fr[^"]*"/g) ?? []);
+
+        // Exactly one control offers French: the language switch itself.
+        expect(switching.length).toBe(1);
+        expect(switching[0]).toContain("svc=ATH-SIGNATURE-RITUAL");
     });
 });

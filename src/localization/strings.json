@@ -549,24 +549,24 @@
       "fr": "Cet horaire est disponible mais vous n'y êtes pas éligible : il ne peut donc pas être réservé."
     },
     "posture_can_commit": {
-      "en": "Ready to reserve",
-      "fr": "Prêt à réserver"
+      "en": "Ready to reserve.",
+      "fr": "Prêt à réserver."
     },
     "posture_can_request": {
-      "en": "Request only",
-      "fr": "Demande uniquement"
+      "en": "Select an eligible time.",
+      "fr": "Sélectionnez un horaire éligible."
     },
     "posture_not_eligible": {
-      "en": "Not eligible",
-      "fr": "Non éligible"
+      "en": "This time is not eligible for this request.",
+      "fr": "Cet horaire n'est pas éligible pour cette demande."
     },
     "posture_no_capacity": {
-      "en": "No capacity",
-      "fr": "Aucune disponibilité"
+      "en": "No time is available for this request.",
+      "fr": "Aucun horaire n'est disponible pour cette demande."
     },
     "posture_not_determined": {
-      "en": "Not determined",
-      "fr": "Non déterminé"
+      "en": "Choose a treatment to continue.",
+      "fr": "Choisissez un soin pour continuer."
     },
     "result_title": {
       "en": "Simulated reservation recorded",
@@ -595,6 +595,18 @@
     "state_QUEUE_EMPTY": {
       "en": "No operator work",
       "fr": "Aucun travail en cours"
+    },
+    "sim_notice": {
+      "en": "Simulated experience — no real booking or payment will be created.",
+      "fr": "Expérience simulée — aucune réservation ni aucun paiement réel ne sera créé."
+    },
+    "sim_details": {
+      "en": "View technical details",
+      "fr": "Voir les détails techniques"
+    },
+    "review_source_value": {
+      "en": "Simulated experience",
+      "fr": "Expérience simulée"
     }
   },
   "display": {

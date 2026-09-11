@@ -77,8 +77,8 @@ function sourceBanner(
     const version = p.fixtureVersion ?? p.sourceVersion ?? "unversioned";
     return `<aside class="src ${isFixture ? "src-fixture" : "src-live"}">
       <span class="src-dot"></span>
-      <span><strong>${escapeHtml(p.sourceType)}</strong> · ${escapeHtml(p.provider)} · ${escapeHtml(version)} — ${escapeHtml(t("fixture_note"))}</span>
-      <a class="src-link" href="${escapeHtml(inspectorPath)}">inspect projection</a>
+      <span>${escapeHtml(t("sim_notice"))}</span>
+      <a class="src-link" href="${escapeHtml(inspectorPath)}">${escapeHtml(t("sim_details"))}</a>
     </aside>`;
 }
 
@@ -108,24 +108,24 @@ function serviceCard(
     t: (key: string) => string
 ): string {
     const chosen = journey.service?.code === service.code;
-    const href = journeyHref(options.basePath, journey.selection, {
+    const href = `${journeyHref(options.basePath, journey.selection, {
         service: chosen ? null : service.code,
         submitted: null
-    });
+    })}#${service.code}`;
     const price = formatMoney(
         service.price.minorUnits,
         service.price.currency,
         journey.selection.locale
     );
 
-    return `<a class="svc${service.featured === true ? " svc-featured" : ""}${chosen ? " svc-chosen" : ""}"
+    return `<a id="${escapeHtml(service.code)}" class="svc${service.featured === true ? " svc-featured" : ""}${chosen ? " svc-chosen" : ""}"
        href="${escapeHtml(href)}" aria-pressed="${chosen ? "true" : "false"}">
       <div class="svc-head">
         <h3>${escapeHtml(service.name)}</h3>
         <p class="svc-price">${escapeHtml(price)}</p>
       </div>
       ${service.description === undefined ? "" : `<p class="svc-copy">${escapeHtml(service.description)}</p>`}
-      <p class="svc-meta">${service.durationMinutes} ${escapeHtml(t("svc_minutes"))} · ${escapeHtml(service.code)}</p>
+      <p class="svc-meta">${service.durationMinutes} ${escapeHtml(t("svc_minutes"))}</p>
       <span class="btn${chosen ? " btn-on" : ""}">${escapeHtml(chosen ? t("svc_chosen") : t("svc_choose"))}</span>
     </a>`;
 }
@@ -138,10 +138,10 @@ function offerRow(
 ): string {
     const isRecommendation = offer.kind === "RECOMMENDATION";
     const applied = journey.offer?.code === offer.code;
-    const href = journeyHref(options.basePath, journey.selection, {
+    const href = `${journeyHref(options.basePath, journey.selection, {
         offer: applied ? null : offer.code,
         submitted: null
-    });
+    })}#offers`;
     const price = formatMoney(offer.price.minorUnits, offer.price.currency, journey.selection.locale);
 
     return `<li class="offer ${isRecommendation ? "offer-rec" : "offer-authorised"}${applied ? " offer-on" : ""}">
@@ -171,10 +171,10 @@ function availabilityRow(
     const selected = journey.selection.windowIndex === index;
     // Selectable even when ineligible: hiding it would misrepresent supply, and the
     // block belongs at commitment where the reason can be stated.
-    const href = journeyHref(options.basePath, journey.selection, {
+    const href = `${journeyHref(options.basePath, journey.selection, {
         window: selected ? null : String(index),
         submitted: null
-    });
+    })}#when`;
 
     return `<li class="av${window.eligible === false ? " av-off" : ""}${selected ? " av-on" : ""}">
       <a class="av-link" href="${escapeHtml(href)}" aria-pressed="${selected ? "true" : "false"}">
@@ -213,8 +213,8 @@ function reviewSection(
 
     const postureKey = POSTURE_KEY[journey.posture] ?? "posture_not_determined";
 
-    const requestHref = journeyHref(options.basePath, journey.selection, { submitted: "1" });
-    const commitHref = journeyHref(options.basePath, journey.selection, { submitted: "1" });
+    const requestHref = `${journeyHref(options.basePath, journey.selection, { submitted: "1" })}#review`;
+    const commitHref = `${journeyHref(options.basePath, journey.selection, { submitted: "1" })}#review`;
     const restartHref = journeyHref(options.basePath, journey.selection, {
         service: null,
         offer: null,
@@ -224,7 +224,7 @@ function reviewSection(
 
     if (journey.selection.submitted && journey.reviewReady && journey.canCommit) {
         // Deterministic fixture result. Explicitly simulated, with no canonical id.
-        return `<section class="review result">
+        return `<section class="review result" id="review">
           <h2>${escapeHtml(t("section_review"))}</h2>
           <p class="posture">${escapeHtml(t("result_title"))}</p>
           <p class="posture-reason">${escapeHtml(t("result_body"))}</p>
@@ -234,7 +234,7 @@ function reviewSection(
             ${reviewRow(t("review_time"), journey.window?.label ?? none)}
             ${reviewRow(t("review_currency"), journey.payable?.currency ?? none)}
             ${reviewRow(t("result_reference"), fixtureResultReference(journey))}
-            ${reviewRow(t("review_source"), `${envelope.provenance.sourceType} · ${envelope.provenance.fixtureVersion ?? ""}`)}
+            ${reviewRow(t("review_source"), t("review_source_value"))}
           </dl>
           <div class="actions">
             <a class="btn" href="${escapeHtml(restartHref)}">${escapeHtml(t("action_restart"))}</a>
@@ -242,7 +242,7 @@ function reviewSection(
         </section>`;
     }
 
-    return `<section class="review">
+    return `<section class="review" id="review">
       <h2>${escapeHtml(t("section_review"))}</h2>
       <p class="posture">${escapeHtml(t(postureKey))}</p>
       <dl class="rev">
@@ -252,7 +252,7 @@ function reviewSection(
         ${reviewRow(t("review_time"), journey.window?.label ?? none)}
         ${reviewRow(t("review_eligibility"), eligibility)}
         ${reviewRow(t("review_currency"), journey.payable?.currency ?? none)}
-        ${reviewRow(t("review_source"), `${envelope.provenance.sourceType} · ${envelope.provenance.fixtureVersion ?? ""}`)}
+        ${reviewRow(t("review_source"), t("review_source_value"))}
       </dl>
       <div class="actions">
         ${
@@ -300,13 +300,11 @@ function stateLabel(
 
 function stepStrip(journey: AthenaJourney, t: (key: string) => string): string {
     const postureKey = POSTURE_KEY[journey.posture] ?? "posture_not_determined";
-    const next = journey.blockedReasonKey === null ? t("posture_can_commit") : t(journey.blockedReasonKey);
     const done = (journey.service === null ? 0 : 1) + (journey.window === null ? 0 : 1);
 
     return `<aside class="steps" aria-live="polite">
       <span class="steps-dots">${[0, 1].map((i) => `<span class="dot${i < done ? " dot-on" : ""}"></span>`).join("")}</span>
       <span class="steps-posture">${escapeHtml(t(postureKey))}</span>
-      <span class="steps-next">${escapeHtml(next)}</span>
     </aside>`;
 }
 
@@ -338,7 +336,9 @@ export function renderAthenaPage(options: AthenaPageOptions): string {
   --radius:${profile.radius};
 }
 *{box-sizing:border-box}
+html{scroll-behavior:smooth}
 html,body{margin:0;padding:0}
+.svc,h2[id],section[id]{scroll-margin-top:96px}
 body{background:var(--parchment);color:var(--ink);font-family:var(--body);
   font-size:${profile.baseFontSize};line-height:${profile.baseLineHeight};-webkit-text-size-adjust:100%}
 .wrap{width:100%;max-width:${profile.contentMaxWidth};margin:0 auto;padding:${profile.contentPadding}}
@@ -476,7 +476,7 @@ ${d.services.map((service) => serviceCard(service, options, journey, t)).join("\
 ${
     d.offers.length === 0
         ? ""
-        : `<h2>${escapeHtml(t("section_offers"))}</h2><ul class="offers">
+        : `<h2 id="offers">${escapeHtml(t("section_offers"))}</h2><ul class="offers">
 ${d.offers.map((offer) => offerRow(offer, options, journey, t)).join("\n")}
 </ul>`
 }
@@ -484,7 +484,7 @@ ${d.offers.map((offer) => offerRow(offer, options, journey, t)).join("\n")}
 ${
     d.availability.length === 0
         ? ""
-        : `<h2>${escapeHtml(t("section_when"))}</h2><ul class="avs">
+        : `<h2 id="when">${escapeHtml(t("section_when"))}</h2><ul class="avs">
 ${d.availability.map((window, index) => availabilityRow(window, index, options, journey, t)).join("\n")}
 </ul>`
 }
