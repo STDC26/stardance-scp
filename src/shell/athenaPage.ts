@@ -336,7 +336,6 @@ export function renderAthenaPage(options: AthenaPageOptions): string {
   --radius:${profile.radius};
 }
 *{box-sizing:border-box}
-html{scroll-behavior:smooth}
 html,body{margin:0;padding:0}
 .svc,h2[id],section[id]{scroll-margin-top:96px}
 body{background:var(--parchment);color:var(--ink);font-family:var(--body);

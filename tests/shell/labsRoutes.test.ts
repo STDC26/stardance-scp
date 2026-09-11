@@ -818,3 +818,17 @@ describe("CLOSE-01-C locale stability", () => {
         expect(switching[0]).toContain("svc=ATH-SIGNATURE-RITUAL");
     });
 });
+
+describe("CLOSE-01-A fragment navigation is not suppressed", () => {
+    it("does not set smooth scroll-behavior on the document element", async () => {
+        // Witnessed on the deployed preview: with `html{scroll-behavior:smooth}`,
+        // Chrome set the hash and then never performed the fragment scroll — the
+        // target sat at y=1549 while scrollY stayed at 25. An automated test can
+        // assert the anchor exists and still miss this, which is why the browser
+        // witness is mandatory. Guarding the regression here anyway.
+        const html = athenaHtml(await athenaDemand());
+        expect(html).not.toContain("scroll-behavior:smooth");
+        // The offset that keeps context above the anchor must survive.
+        expect(html).toContain("scroll-margin-top");
+    });
+});
