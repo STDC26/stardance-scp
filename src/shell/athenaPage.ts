@@ -259,7 +259,7 @@ function reviewSection(
               var a = document.getElementById("athena-continue");
               if (!a) { return; }
               a.setAttribute("aria-disabled", "true");
-              setTimeout(function () { window.location.assign(a.getAttribute("href")); }, 700);
+              setTimeout(function () { window.location.assign(a.getAttribute("href")); }, 1800);
             })();
           </script>
         </section>`;
@@ -515,7 +515,10 @@ h2{font-family:var(--body);font-size:.75rem;font-weight:600;
   .svc{padding:22px}
   .offer{grid-template-columns:auto 1fr;row-gap:6px}
   .offer-price{grid-column:2;justify-self:start}
-  .av{flex-wrap:wrap;gap:8px}
+  /* F06: the flex container is the anchor, not the list item. Wrapping the
+     item did nothing, which is why a long eligibility phrase could push the
+     row past the viewport. */
+  .av-link{flex-wrap:wrap;gap:8px 16px}
   .rev-row{flex-direction:column;gap:4px}
   .rev-row dd{text-align:left}
 }
@@ -524,6 +527,10 @@ h2{font-family:var(--body);font-size:.75rem;font-weight:600;
   h1{font-size:1.95rem}
   .tagline{font-size:1.1rem}
   .btn{width:100%}
+  /* F06 at 320: "available, not eligible for you" alongside "Selected" cannot
+     share a line. Stacking keeps the whole row one tap target and keeps the
+     refusal readable rather than clipped. */
+  .av-link{flex-direction:column;align-items:flex-start;gap:6px;padding:14px 16px}
 }
 </style>
 </head>

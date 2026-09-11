@@ -389,3 +389,23 @@ describe("EXE-R1 locale stability across submit and result", () => {
         expect(fr).toContain(translate("athena", "result_title", "fr"));
     });
 });
+
+// ---------------------------------------------------------------------------
+// F06 — the responsive rules the six-width qualification actually depends on
+// ---------------------------------------------------------------------------
+
+describe("EXE-R1-F06 responsive rules", () => {
+    it("wraps the availability anchor, which is the flex container", async () => {
+        const css = athenaHtml(await athenaDemand(), COMMITTABLE).split("</style>")[0]!;
+        // The list item is not a flex container, so a wrap rule on it is inert.
+        // This is the exact defect the 320px measurement surfaced.
+        expect(css).toContain(".av-link{flex-wrap:wrap");
+        expect(css).not.toMatch(/\.av\{flex-wrap/);
+    });
+
+    it("stacks the availability row below 400px so a refusal is never clipped", async () => {
+        const css = athenaHtml(await athenaDemand(), COMMITTABLE).split("</style>")[0]!;
+        const narrow = css.slice(css.indexOf("@media (max-width:400px)"));
+        expect(narrow).toContain(".av-link{flex-direction:column");
+    });
+});
