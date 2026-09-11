@@ -29,8 +29,26 @@ export const PARAM = {
     service: "svc",
     offer: "offer",
     window: "slot",
+    /** EXE-R1-F01: the in-flight stage. Distinct from `submitted`. */
+    submitting: "submit",
     submitted: "done"
 } as const;
+
+/**
+ * EXE-R1-F01 — the journey stage.
+ *
+ * This is EXPERIENCE INTERACTION STATE. It is emphatically not a canonical
+ * workflow state: no SCP command, record or transition is named SUBMITTING, and
+ * nothing downstream of the Shell can observe it. It exists so a customer can
+ * see that their action was taken while the next projection is being produced.
+ */
+export type AthenaStage =
+    | "DISCOVER"
+    | "SERVICE_SELECTED"
+    | "AVAILABILITY_SELECTED"
+    | "REVIEW"
+    | "SUBMITTING"
+    | "RESULT";
 
 export interface AthenaSelection {
     locale: string;
@@ -38,6 +56,8 @@ export interface AthenaSelection {
     offerCode: string | null;
     /** Index into the availability list. Stable across locales by construction. */
     windowIndex: number | null;
+    /** EXE-R1-F01: the action has been taken; the result is being produced. */
+    submitting: boolean;
     submitted: boolean;
 }
 
@@ -63,6 +83,8 @@ export interface AthenaJourney {
     blockedReasonKey: string | null;
     reviewReady: boolean;
     canCommit: boolean;
+    /** EXE-R1-F01 — experience stage, never a canonical workflow state. */
+    stage: AthenaStage;
 }
 
 /** Reads the bounded state out of a URL. Unknown values are treated as absent. */
@@ -84,6 +106,7 @@ export function parseSelection(
         serviceCode: emptyToNull(params.get(PARAM.service)),
         offerCode: emptyToNull(params.get(PARAM.offer)),
         windowIndex: Number.isInteger(parsedWindow) ? parsedWindow : null,
+        submitting: params.get(PARAM.submitting) === "1",
         submitted: params.get(PARAM.submitted) === "1"
     };
 }
@@ -152,6 +175,26 @@ export function deriveJourney(
         blockedReasonKey = "reason_no_time";
     }
 
+    const reviewReady = service !== null && window !== null;
+    const canCommit = posture === "CAN_COMMIT";
+
+    // Stage is derived, never stored. RESULT and SUBMITTING are only reachable
+    // from a complete, committable selection — so a hand-typed `?done=1` on an
+    // ineligible window lands on REVIEW, where the refusal is stated, rather than
+    // on a fabricated result.
+    let stage: AthenaStage;
+    if (selection.submitted && canCommit) {
+        stage = "RESULT";
+    } else if (selection.submitting && canCommit) {
+        stage = "SUBMITTING";
+    } else if (reviewReady) {
+        stage = "REVIEW";
+    } else if (service !== null) {
+        stage = "SERVICE_SELECTED";
+    } else {
+        stage = "DISCOVER";
+    }
+
     return {
         selection,
         service,
@@ -161,8 +204,9 @@ export function deriveJourney(
         offerApplied,
         posture,
         blockedReasonKey,
-        reviewReady: service !== null && window !== null,
-        canCommit: posture === "CAN_COMMIT"
+        reviewReady,
+        canCommit,
+        stage
     };
 }
 
@@ -184,6 +228,7 @@ export function journeyHref(
         service: selection.serviceCode,
         offer: selection.offerCode,
         window: selection.windowIndex === null ? null : String(selection.windowIndex),
+        submitting: selection.submitting ? "1" : null,
         submitted: selection.submitted ? "1" : null
     };
 
@@ -198,19 +243,4 @@ export function journeyHref(
 
     const query = params.toString();
     return query === "" ? basePath : `${basePath}?${query}`;
-}
-
-/**
- * The deterministic fixture result reference.
- *
- * Derived from the selection rather than generated, so the same journey always
- * yields the same reference and a UAT observation is reproducible. The `FIXTURE-`
- * prefix is load-bearing: nobody should be able to mistake this for a canonical
- * request id, which is a UUID.
- */
-export function fixtureResultReference(journey: AthenaJourney): string {
-    const service = journey.service?.code ?? "NO-SERVICE";
-    const slot = journey.selection.windowIndex ?? "NO-SLOT";
-    const offer = journey.offerApplied ? journey.offer?.code ?? "NO-OFFER" : "NO-OFFER";
-    return `FIXTURE-${service}-${slot}-${offer}`;
 }

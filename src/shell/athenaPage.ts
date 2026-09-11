@@ -32,13 +32,13 @@ import { translate } from "../localization/translate";
 import { formatMoney } from "./money";
 import {
     deriveJourney,
-    fixtureResultReference,
     journeyHref,
     parseSelection,
     type AthenaJourney,
     type AthenaSelection
 } from "./athenaInteraction";
 import type { DemandPayload, ProjectionEnvelope } from "./contract";
+import { ATHENA_FIXTURE_ACTION, executeAthenaFixtureAction } from "./athenaFixtureHandler";
 
 export interface AthenaPageOptions {
     envelope: ProjectionEnvelope<DemandPayload>;
@@ -213,17 +213,86 @@ function reviewSection(
 
     const postureKey = POSTURE_KEY[journey.posture] ?? "posture_not_determined";
 
-    const requestHref = `${journeyHref(options.basePath, journey.selection, { submitted: "1" })}#review`;
-    const commitHref = `${journeyHref(options.basePath, journey.selection, { submitted: "1" })}#review`;
+    const requestHref = `${journeyHref(options.basePath, journey.selection, { submitting: "1" })}#review`;
+    const commitHref = `${journeyHref(options.basePath, journey.selection, { submitting: "1" })}#review`;
     const restartHref = journeyHref(options.basePath, journey.selection, {
         service: null,
         offer: null,
         window: null,
+        submitting: null,
         submitted: null
     });
+    // EXE-R1-F05 — "back"/"change" return to Review with the selection intact,
+    // which is what makes retry reuse current valid state rather than opening a
+    // second hidden transaction.
+    const backHref = `${journeyHref(options.basePath, journey.selection, {
+        submitting: null,
+        submitted: null
+    })}#review`;
+    const changeHref = `${journeyHref(options.basePath, journey.selection, {
+        window: null,
+        submitting: null,
+        submitted: null
+    })}#when`;
 
-    if (journey.selection.submitted && journey.reviewReady && journey.canCommit) {
-        // Deterministic fixture result. Explicitly simulated, with no canonical id.
+    // EXE-R1-F01 — SUBMITTING. A bounded experience stage: the action has been
+    // taken, the result is not yet shown, and there is deliberately no submit
+    // control on this page, which is what prevents a duplicate submission.
+    if (journey.stage === "SUBMITTING") {
+        const continueHref = `${journeyHref(options.basePath, journey.selection, {
+            submitting: null,
+            submitted: "1"
+        })}#review`;
+        return `<section class="review submitting" id="review" aria-busy="true">
+          <h2>${escapeHtml(t("section_review"))}</h2>
+          <p class="posture">${escapeHtml(t("loading"))}</p>
+          <p class="posture-reason">${escapeHtml(t("loading_note"))}</p>
+          <div class="progress" role="progressbar" aria-label="${escapeHtml(t("loading"))}"><span></span></div>
+          <div class="actions">
+            <a class="btn btn-primary" id="athena-continue" href="${escapeHtml(continueHref)}">${escapeHtml(t("continue"))}</a>
+            <a class="btn" href="${escapeHtml(backHref)}">${escapeHtml(t("back"))}</a>
+          </div>
+          <script>
+            // Progressive enhancement only. Without script the customer advances
+            // with the control above; the state is a real URL either way.
+            (function () {
+              var a = document.getElementById("athena-continue");
+              if (!a) { return; }
+              a.setAttribute("aria-disabled", "true");
+              setTimeout(function () { window.location.assign(a.getAttribute("href")); }, 700);
+            })();
+          </script>
+        </section>`;
+    }
+
+    if (journey.stage === "RESULT") {
+        // EXE-R1-F03 — the handler validates; the renderer does not decide.
+        const outcome = executeAthenaFixtureAction({
+            action: ATHENA_FIXTURE_ACTION,
+            envelope,
+            serviceCode: journey.selection.serviceCode,
+            availabilityIndex: journey.selection.windowIndex,
+            offerCode: journey.selection.offerCode,
+            stage: "SUBMITTING"
+        });
+
+        if (!outcome.ok) {
+            // A refusal never becomes a result. The reason is shown and the
+            // customer can retry from their current valid selection.
+            return `<section class="review error" id="review" role="alert">
+              <h2>${escapeHtml(t("section_review"))}</h2>
+              <p class="posture">${escapeHtml(t("error"))}</p>
+              <p class="posture-reason">${escapeHtml(
+                  outcome.messageKey === null ? t("error") : t(outcome.messageKey)
+              )}</p>
+              <div class="actions">
+                <a class="btn btn-primary" href="${escapeHtml(backHref)}">${escapeHtml(t("retry"))}</a>
+                <a class="btn" href="${escapeHtml(changeHref)}">${escapeHtml(t("change"))}</a>
+              </div>
+            </section>`;
+        }
+
+        const fixtureResult = outcome.result;
         return `<section class="review result" id="review">
           <h2>${escapeHtml(t("section_review"))}</h2>
           <p class="posture">${escapeHtml(t("result_title"))}</p>
@@ -233,7 +302,7 @@ function reviewSection(
             ${reviewRow(t("review_price"), payable)}
             ${reviewRow(t("review_time"), journey.window?.label ?? none)}
             ${reviewRow(t("review_currency"), journey.payable?.currency ?? none)}
-            ${reviewRow(t("result_reference"), fixtureResultReference(journey))}
+            ${reviewRow(t("result_reference"), fixtureResult.resultId)}
             ${reviewRow(t("review_source"), t("review_source_value"))}
           </dl>
           <div class="actions">
@@ -418,6 +487,10 @@ h2{font-family:var(--body);font-size:.75rem;font-weight:600;
 .review{margin-top:${profile.sectionMargin};border:1px solid var(--line);
   border-radius:var(--radius);padding:32px;background:#fff}
 .result{border-color:var(--sage)}
+.submitting{border-color:var(--bronze)}
+.error{border-color:#9A5B3C}
+.progress{height:3px;background:var(--line);border-radius:2px;overflow:hidden;margin:0 0 22px}
+.progress span{display:block;height:100%;width:40%;background:var(--bronze)}
 .posture{font-family:var(--heading);font-size:1.6rem;margin:0 0 12px}
 .posture-reason{margin:0 0 22px;color:#4A443D}
 .rev{margin:0 0 26px;padding:0}

@@ -607,6 +607,42 @@
     "review_source_value": {
       "en": "Simulated experience",
       "fr": "Expérience simulée"
+    },
+    "loading": {
+      "en": "Sending your request…",
+      "fr": "Envoi de votre demande…"
+    },
+    "loading_note": {
+      "en": "Please wait. Do not submit again.",
+      "fr": "Veuillez patienter. Ne renvoyez pas la demande."
+    },
+    "continue": {
+      "en": "Continue",
+      "fr": "Continuer"
+    },
+    "error": {
+      "en": "That request could not be completed.",
+      "fr": "Cette demande n'a pas pu être traitée."
+    },
+    "retry": {
+      "en": "Try again",
+      "fr": "Réessayer"
+    },
+    "back": {
+      "en": "Back",
+      "fr": "Retour"
+    },
+    "change": {
+      "en": "Change",
+      "fr": "Modifier"
+    },
+    "reason_invalid_offer": {
+      "en": "That offer is not available for this request.",
+      "fr": "Cette offre n'est pas disponible pour cette demande."
+    },
+    "result_status": {
+      "en": "Simulated request accepted",
+      "fr": "Demande simulée acceptée"
     }
   },
   "display": {
