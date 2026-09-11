@@ -360,8 +360,11 @@ describe("C8 semantic integrity", () => {
 
         expect(html).toContain("Simulated reservation recorded");
         expect(html).toContain(
-            "Nothing has been reserved, nothing has been charged, and no canonical record exists."
+            "Nothing has been reserved, nothing has been charged, and no booking record exists."
         );
+        // The reference stays fixture-identifiable — that is what makes the
+        // simulation impossible to mistake for a canonical booking id.
+        expect(html).toContain("FIXTURE-ATH-SIGNATURE-RITUAL-0-NO-OFFER");
         // The reference is unmistakably a fixture, not a UUID.
         expect(html).toContain("FIXTURE-ATH-SIGNATURE-RITUAL-0-NO-OFFER");
         expect(html).toContain('class="src src-fixture"');

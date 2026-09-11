@@ -573,12 +573,12 @@
       "fr": "Réservation simulée enregistrée"
     },
     "result_body": {
-      "en": "This is a fixture result. Nothing has been reserved, nothing has been charged, and no canonical record exists.",
-      "fr": "Ceci est un résultat fictif. Rien n'a été réservé, rien n'a été facturé, et aucun enregistrement canonique n'existe."
+      "en": "This is a simulated result. Nothing has been reserved, nothing has been charged, and no booking record exists.",
+      "fr": "Ceci est un résultat simulé. Rien n'a été réservé, rien n'a été facturé, et aucune réservation n'existe."
     },
     "result_reference": {
-      "en": "Fixture reference",
-      "fr": "Référence fictive"
+      "en": "Reference",
+      "fr": "Référence"
     },
     "fixture_note": {
       "en": "Simulated data — not authoritative",
